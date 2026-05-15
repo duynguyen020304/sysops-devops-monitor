@@ -3,3 +3,8 @@
 
 # OMx folder
 omx/
+
+# Environment files
+.env
+.env.local
+.env.*.local
