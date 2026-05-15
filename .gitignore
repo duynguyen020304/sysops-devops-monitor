@@ -1,2 +1,5 @@
 # OMC session files
 .omc/
+
+# OMx folder
+omx/
