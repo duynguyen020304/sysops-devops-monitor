@@ -2,11 +2,9 @@ export interface User {
   id: string
   name: string
   email: string
-  role: 'Owner' | 'Admin' | 'DevOpsEngineer' | 'Developer' | 'Viewer'
-  createdAt: string
-  sshUsername: string | null
-  sshPort: number
-  sshPrivateKeyPath: string | null
+  roles: string[]
+  permissions: string[]
+  workspaceId: string
 }
 
 export interface DeployAgentResponse {

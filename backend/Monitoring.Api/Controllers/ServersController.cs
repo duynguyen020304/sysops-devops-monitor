@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Monitoring.Api.Filters;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Entities;
 using Monitoring.Core.Interfaces;
@@ -39,6 +40,7 @@ public class ServersController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("view_servers")]
     public async Task<ActionResult<List<ServerDto>>> GetServers()
     {
         var workspaceId = GetWorkspaceId();
@@ -48,6 +50,7 @@ public class ServersController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission("view_servers")]
     public async Task<ActionResult<ServerDto>> GetServer(Guid id)
     {
         var server = await _serverService.GetServerAsync(id);
@@ -62,6 +65,7 @@ public class ServersController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission("connect_agents")]
     public async Task<IActionResult> UpdateServer(Guid id, [FromBody] RegisterServerRequest request)
     {
         var server = await _serverService.GetServerAsync(id);
@@ -77,6 +81,7 @@ public class ServersController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission("connect_agents")]
     public async Task<IActionResult> DeleteServer(Guid id)
     {
         var server = await _serverService.GetServerAsync(id);
@@ -92,6 +97,7 @@ public class ServersController : ControllerBase
     }
 
     [HttpPost("{id:guid}/deploy-agent")]
+    [RequirePermission("deploy_agents")]
     public async Task<ActionResult<DeployAgentResponse>> DeployAgent(Guid id, CancellationToken ct)
     {
         var server = await _serverService.GetServerAsync(id);
@@ -138,6 +144,7 @@ public class ServersController : ControllerBase
     }
 
     [HttpGet("{id:guid}/health")]
+    [RequirePermission("view_servers")]
     public async Task<ActionResult<ServerHealthDto>> GetHealth(Guid id)
     {
         var server = await _serverService.GetServerAsync(id);

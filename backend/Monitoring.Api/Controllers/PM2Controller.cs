@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Monitoring.Api.Filters;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Interfaces;
 using System.Security.Claims;
@@ -21,6 +22,7 @@ public class PM2Controller : ControllerBase
     }
 
     [HttpGet("servers/{id:guid}/pm2")]
+    [RequirePermission("view_pm2_logs")]
     public async Task<ActionResult<List<PM2ProcessDetailDto>>> GetProcesses(Guid id)
     {
         var server = await _serverService.GetServerAsync(id);
@@ -52,6 +54,7 @@ public class PM2Controller : ControllerBase
     }
 
     [HttpGet("pm2/{processId:guid}")]
+    [RequirePermission("view_pm2_logs")]
     public async Task<ActionResult<PM2ProcessDetailDto>> GetProcess(Guid processId)
     {
         var process = await _pm2Service.GetProcessAsync(processId);
@@ -86,6 +89,7 @@ public class PM2Controller : ControllerBase
     }
 
     [HttpGet("pm2/{processId:guid}/logs")]
+    [RequirePermission("view_pm2_logs")]
     public async Task<ActionResult<List<PM2LogDto>>> GetProcessLogs(
         Guid processId,
         [FromQuery] int limit = 100)

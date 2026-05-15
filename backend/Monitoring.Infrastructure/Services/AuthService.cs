@@ -46,7 +46,6 @@ public class AuthService : IAuthService
             Name = request.Name,
             Email = request.Email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-            Role = UserRole.Owner,
             Status = UserStatus.Active,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -54,11 +53,24 @@ public class AuthService : IAuthService
 
         workspace.OwnerUserId = user.Id;
 
+        // Assign Owner role to the registering user
+        var ownerRole = await _db.Roles.FirstOrDefaultAsync(r => r.NormalizedName == "OWNER");
+        if (ownerRole is not null)
+        {
+            _db.UserRoles.Add(new UserRoleEntity
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                RoleId = ownerRole.Id,
+                GrantedAt = DateTime.UtcNow
+            });
+        }
+
         _db.Workspaces.Add(workspace);
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        return BuildAuthResponse(user);
+        return await BuildAuthResponseAsync(user);
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
@@ -72,13 +84,11 @@ public class AuthService : IAuthService
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new UnauthorizedAccessException("Invalid email or password.");
 
-        return BuildAuthResponse(user);
+        return await BuildAuthResponseAsync(user);
     }
 
     public async Task<AuthResponse> RefreshTokenAsync(RefreshTokenRequest request)
     {
-        // In a full implementation, we would validate the refresh token from Redis/DB.
-        // For now, decode the user info from the refresh token and issue a new pair.
         var principal = GetPrincipalFromExpiredToken(request.RefreshToken)
             ?? throw new UnauthorizedAccessException("Invalid refresh token.");
 
@@ -88,16 +98,15 @@ public class AuthService : IAuthService
         var user = await _db.Users.FindAsync(Guid.Parse(userIdClaim))
             ?? throw new UnauthorizedAccessException("User not found.");
 
-        return BuildAuthResponse(user);
+        return await BuildAuthResponseAsync(user);
     }
 
     public Task RevokeRefreshTokenAsync(string refreshToken)
     {
-        // Placeholder: In production, remove from Redis store
         return Task.CompletedTask;
     }
 
-    public string GenerateJwtToken(User user)
+    public string GenerateJwtToken(User user, string roles, string permissions)
     {
         var jwtSettings = _config.GetSection("JwtSettings");
         var secretKey = jwtSettings["SecretKey"]
@@ -110,7 +119,8 @@ public class AuthService : IAuthService
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Email, user.Email),
             new(ClaimTypes.Name, user.Name),
-            new(ClaimTypes.Role, user.Role.ToString()),
+            new(ClaimTypes.Role, roles),
+            new("permissions", permissions),
             new("WorkspaceId", user.WorkspaceId.ToString())
         };
 
@@ -127,9 +137,25 @@ public class AuthService : IAuthService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private AuthResponse BuildAuthResponse(User user)
+    private async Task<AuthResponse> BuildAuthResponseAsync(User user)
     {
-        var token = GenerateJwtToken(user);
+        // Load user's roles and permissions from DB
+        var userRoles = await _db.UserRoles
+            .Where(ur => ur.UserId == user.Id)
+            .Join(_db.Roles, ur => ur.RoleId, r => r.Id, (_, r) => r.Name)
+            .ToListAsync();
+
+        var userPermissions = await _db.UserRoles
+            .Where(ur => ur.UserId == user.Id)
+            .Join(_db.RolePermissions, ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => rp.PermissionId)
+            .Join(_db.Permissions, permId => permId, p => p.Id, (_, p) => p.Name)
+            .Distinct()
+            .ToListAsync();
+
+        var rolesStr = string.Join(",", userRoles);
+        var permsStr = string.Join(",", userPermissions);
+
+        var token = GenerateJwtToken(user, rolesStr, permsStr);
         var refreshToken = GenerateRefreshToken();
         var expiresMinutes = int.Parse(_config.GetSection("JwtSettings")["ExpiresInMinutes"] ?? "60");
 
@@ -141,7 +167,8 @@ public class AuthService : IAuthService
                 Id: user.Id,
                 Name: user.Name,
                 Email: user.Email,
-                Role: user.Role.ToString(),
+                Roles: userRoles,
+                Permissions: userPermissions,
                 WorkspaceId: user.WorkspaceId
             )
         );

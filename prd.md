@@ -1375,7 +1375,6 @@ The system may hit GitHub API rate limits when monitoring many repositories or f
 Mitigation:
 
 - Use efficient polling intervals.
-- Cache workflow data.
 - Fetch logs only when needed or when workflows fail.
 - Prefer webhook-based updates where possible.
 

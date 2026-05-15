@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Monitoring.Api.Filters;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Entities;
 using Monitoring.Core.Interfaces;
@@ -22,6 +23,7 @@ public class MetricsController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("view_metrics")]
     public async Task<ActionResult<ServerMetricsSummaryDto>> GetServerMetrics(
         Guid serverId,
         [FromQuery] DateTimeOffset? from,
@@ -40,6 +42,7 @@ public class MetricsController : ControllerBase
     }
 
     [HttpGet("raw")]
+    [RequirePermission("view_metrics")]
     public async Task<ActionResult<List<ServerMetric>>> GetRawMetrics(
         Guid serverId,
         [FromQuery] DateTimeOffset? from,

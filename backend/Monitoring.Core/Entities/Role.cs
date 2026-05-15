@@ -1,17 +1,15 @@
-using Monitoring.Core.Enums;
-
 namespace Monitoring.Core.Entities;
 
-public class User
+public class Role
 {
     public Guid Id { get; set; }
-    public Guid WorkspaceId { get; set; }
     public required string Name { get; set; }
-    public required string Email { get; set; }
-    public required string PasswordHash { get; set; }
-    public UserStatus Status { get; set; }
+    public required string NormalizedName { get; set; }
+    public string? Description { get; set; }
+    public bool IsSystem { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
+    public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
     public ICollection<UserRoleEntity> UserRoles { get; set; } = new List<UserRoleEntity>();
 }

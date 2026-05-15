@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Monitoring.Api.Filters;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Interfaces;
 
@@ -18,6 +19,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("view_servers")]
     public async Task<ActionResult<PagedResult<WorkflowRunDto>>> GetWorkflowRuns(
         Guid repositoryId,
         [FromQuery] int page = 1,
@@ -59,6 +61,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{runId:long}")]
+    [RequirePermission("view_servers")]
     public async Task<ActionResult<WorkflowRunDetailDto>> GetWorkflowRunDetail(
         Guid repositoryId, long runId)
     {
@@ -106,6 +109,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{runId:long}/logs")]
+    [RequirePermission("view_servers")]
     public async Task<ActionResult<PagedResult<WorkflowLogDto>>> GetWorkflowLogs(
         Guid repositoryId,
         long runId,
@@ -139,6 +143,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("~/api/repositories/{repositoryId:guid}/stats")]
+    [RequirePermission("view_servers")]
     public async Task<ActionResult<RepositoryStatsDto>> GetRepositoryStats(Guid repositoryId)
     {
         var repository = await _gitHubService.GetRepositoryAsync(repositoryId);

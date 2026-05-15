@@ -1,7 +1,5 @@
 using System.Diagnostics;
 using System.Security.Claims;
-using Monitoring.Core.Enums;
-using Monitoring.Core.Interfaces;
 
 namespace Monitoring.Api.Middleware;
 

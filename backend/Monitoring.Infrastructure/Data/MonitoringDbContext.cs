@@ -9,6 +9,10 @@ public class MonitoringDbContext : DbContext
 
     public DbSet<Workspace> Workspaces => Set<Workspace>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<UserRoleEntity> UserRoles => Set<UserRoleEntity>();
     public DbSet<Repository> Repositories => Set<Repository>();
     public DbSet<WorkflowRun> WorkflowRuns => Set<WorkflowRun>();
     public DbSet<WorkflowLog> WorkflowLogs => Set<WorkflowLog>();
@@ -39,6 +43,56 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.PasswordHash).IsRequired();
             e.HasIndex(x => x.Email).IsUnique();
             e.HasIndex(x => x.WorkspaceId);
+            e.HasMany(x => x.UserRoles)
+                .WithOne(x => x.User)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Role
+        modelBuilder.Entity<Role>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).IsRequired().HasMaxLength(100);
+            e.Property(x => x.NormalizedName).IsRequired().HasMaxLength(100);
+            e.HasIndex(x => x.NormalizedName).IsUnique();
+            e.HasMany(x => x.RolePermissions)
+                .WithOne(x => x.Role)
+                .HasForeignKey(x => x.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.UserRoles)
+                .WithOne(x => x.Role)
+                .HasForeignKey(x => x.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Permission
+        modelBuilder.Entity<Permission>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).IsRequired().HasMaxLength(100);
+            e.Property(x => x.NormalizedName).IsRequired().HasMaxLength(100);
+            e.Property(x => x.Category).HasMaxLength(100);
+            e.Property(x => x.Description).HasMaxLength(256);
+            e.HasIndex(x => x.NormalizedName).IsUnique();
+            e.HasMany(x => x.RolePermissions)
+                .WithOne(x => x.Permission)
+                .HasForeignKey(x => x.PermissionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // RolePermission
+        modelBuilder.Entity<RolePermission>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.RoleId, x.PermissionId }).IsUnique();
+        });
+
+        // UserRoleEntity
+        modelBuilder.Entity<UserRoleEntity>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.UserId, x.RoleId }).IsUnique();
         });
 
         // Repository

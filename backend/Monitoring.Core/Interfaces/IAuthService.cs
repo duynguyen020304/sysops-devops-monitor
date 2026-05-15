@@ -8,5 +8,5 @@ public interface IAuthService
     Task<AuthResponse> LoginAsync(LoginRequest request);
     Task<AuthResponse> RefreshTokenAsync(RefreshTokenRequest request);
     Task RevokeRefreshTokenAsync(string refreshToken);
-    string GenerateJwtToken(Core.Entities.User user);
+    string GenerateJwtToken(Core.Entities.User user, string roles, string permissions);
 }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Monitoring.Api.Filters;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Interfaces;
 using System.Security.Claims;
@@ -19,6 +20,7 @@ public class RepositoriesController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("view_servers")]
     public async Task<ActionResult<List<RepositoryDto>>> GetRepositories()
     {
         var workspaceId = GetWorkspaceId();
@@ -38,6 +40,7 @@ public class RepositoriesController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("connect_repos")]
     public async Task<ActionResult<RepositoryDto>> ConnectRepository([FromBody] ConnectRepositoryRequest request)
     {
         try
@@ -69,6 +72,7 @@ public class RepositoriesController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission("view_servers")]
     public async Task<ActionResult<RepositoryDto>> GetRepository(Guid id)
     {
         var repository = await _gitHubService.GetRepositoryAsync(id);
@@ -93,6 +97,7 @@ public class RepositoriesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission("connect_repos")]
     public async Task<IActionResult> DisconnectRepository(Guid id)
     {
         var repository = await _gitHubService.GetRepositoryAsync(id);

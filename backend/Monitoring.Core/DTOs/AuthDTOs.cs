@@ -22,10 +22,12 @@ public record UserDto(
     Guid Id,
     string Name,
     string Email,
-    string Role,
+    List<string> Roles,
+    List<string> Permissions,
     Guid WorkspaceId
 );
 
 public record RefreshTokenRequest(
     string RefreshToken
 );
+

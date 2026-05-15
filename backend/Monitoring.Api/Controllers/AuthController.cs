@@ -78,17 +78,22 @@ public class AuthController : ControllerBase
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var email = User.FindFirst(ClaimTypes.Email)?.Value;
         var name = User.FindFirst(ClaimTypes.Name)?.Value;
-        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        var rolesStr = User.FindFirst(ClaimTypes.Role)?.Value;
+        var permissionsStr = User.FindFirst("permissions")?.Value;
         var workspaceId = User.FindFirst("WorkspaceId")?.Value;
 
-        if (userId is null || email is null || name is null || role is null || workspaceId is null)
+        if (userId is null || email is null || name is null || rolesStr is null || workspaceId is null)
             return Unauthorized();
+
+        var roles = rolesStr.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var permissions = (permissionsStr ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
 
         return Ok(new UserDto(
             Id: Guid.Parse(userId),
             Name: name,
             Email: email,
-            Role: role,
+            Roles: roles,
+            Permissions: permissions,
             WorkspaceId: Guid.Parse(workspaceId)
         ));
     }

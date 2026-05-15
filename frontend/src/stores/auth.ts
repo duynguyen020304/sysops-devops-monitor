@@ -9,6 +9,20 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshToken = ref<string | null>(null)
 
   const isAuthenticated = computed(() => !!token.value && !!user.value)
+  const permissions = computed(() => user.value?.permissions ?? [])
+  const roles = computed(() => user.value?.roles ?? [])
+
+  function hasPermission(permission: string): boolean {
+    return permissions.value.includes(permission)
+  }
+
+  function hasRole(role: string): boolean {
+    return roles.value.includes(role)
+  }
+
+  function hasAnyPermission(...perms: string[]): boolean {
+    return perms.some(p => permissions.value.includes(p))
+  }
 
   async function login(email: string, password: string) {
     const { data } = await api.post<AuthResponse>('/auth/login', {
@@ -66,6 +80,11 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     refreshToken,
     isAuthenticated,
+    permissions,
+    roles,
+    hasPermission,
+    hasRole,
+    hasAnyPermission,
     login,
     register,
     logout,

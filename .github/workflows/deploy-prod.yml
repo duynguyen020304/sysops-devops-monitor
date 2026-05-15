@@ -326,7 +326,6 @@ jobs:
           export ASPNETCORE_ENVIRONMENT='Production'
           export ASPNETCORE_URLS='http://localhost:5000'
           export ConnectionStrings__DefaultConnection='${{ secrets.POSTGRESQL_CONNECTION_STRING }}'
-          export ConnectionStrings__Redis='${{ secrets.REDIS_CONNECTION_STRING }}'
           export JwtSettings__SecretKey='${{ secrets.JWT_SECRET_KEY }}'
           export JwtSettings__Issuer='${{ secrets.JWT_ISSUER }}'
           export JwtSettings__Audience='${{ secrets.JWT_AUDIENCE }}'

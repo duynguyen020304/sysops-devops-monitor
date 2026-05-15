@@ -31,14 +31,7 @@ public class RequirePermissionAttribute : Attribute, IAsyncAuthorizationFilter
             return;
         }
 
-        var userRoleClaim = context.HttpContext.User.FindFirstValue(ClaimTypes.Role);
-        if (string.IsNullOrEmpty(userRoleClaim) || !Enum.TryParse<Core.Enums.UserRole>(userRoleClaim, out var role))
-        {
-            context.Result = new ForbidResult();
-            return;
-        }
-
-        if (!permissionService.HasPermission(role, _permission))
+        if (!await permissionService.HasPermissionAsync(userId, _permission))
         {
             context.Result = new ForbidResult();
             return;

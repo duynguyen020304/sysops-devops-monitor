@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Monitoring.Api.Filters;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Interfaces;
 
@@ -18,6 +19,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("view_dashboards")]
     public async Task<ActionResult<PagedResult<AlertDto>>> GetAlerts([FromQuery] AlertListRequest request)
     {
         var workspaceId = GetWorkspaceId();
@@ -26,6 +28,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission("view_dashboards")]
     public async Task<ActionResult<AlertDto>> GetAlert(Guid id)
     {
         var workspaceId = GetWorkspaceId();
@@ -38,6 +41,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpPost("rules")]
+    [RequirePermission("configure_alerts")]
     public async Task<ActionResult<AlertRuleDto>> CreateRule([FromBody] CreateAlertRuleRequest request)
     {
         var workspaceId = GetWorkspaceId();
@@ -46,6 +50,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpGet("rules")]
+    [RequirePermission("view_dashboards")]
     public async Task<ActionResult<List<AlertRuleDto>>> GetRules()
     {
         var workspaceId = GetWorkspaceId();
@@ -54,6 +59,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpPut("rules/{id:guid}")]
+    [RequirePermission("configure_alerts")]
     public async Task<ActionResult<AlertRuleDto>> UpdateRule(Guid id, [FromBody] UpdateAlertRuleRequest request)
     {
         var workspaceId = GetWorkspaceId();
@@ -70,6 +76,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpDelete("rules/{id:guid}")]
+    [RequirePermission("configure_alerts")]
     public async Task<IActionResult> DeleteRule(Guid id)
     {
         var workspaceId = GetWorkspaceId();
@@ -82,6 +89,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/acknowledge")]
+    [RequirePermission("acknowledge_alerts")]
     public async Task<IActionResult> AcknowledgeAlert(Guid id)
     {
         var workspaceId = GetWorkspaceId();
@@ -95,6 +103,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/resolve")]
+    [RequirePermission("resolve_alerts")]
     public async Task<IActionResult> ResolveAlert(Guid id)
     {
         var workspaceId = GetWorkspaceId();
@@ -108,6 +117,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/mute")]
+    [RequirePermission("manage_alerts")]
     public async Task<IActionResult> MuteAlert(Guid id)
     {
         var workspaceId = GetWorkspaceId();

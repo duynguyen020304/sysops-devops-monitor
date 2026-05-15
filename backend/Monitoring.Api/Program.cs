@@ -10,7 +10,24 @@ using Monitoring.Infrastructure.Data;
 using Monitoring.Infrastructure.Services;
 using Monitoring.Api.Middleware;
 
+// Load .env file (searches up from current directory)
+DotNetEnv.Env.Load(Path.Combine(Directory.GetCurrentDirectory(), "..", ".env"));
+
 var builder = WebApplication.CreateBuilder(args);
+
+// Build connection string from individual DB_ env vars if CONNECTION_STRING not set
+var connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
+if (string.IsNullOrEmpty(connectionString))
+{
+    var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+    var dbPort = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
+    var dbName = Environment.GetEnvironmentVariable("DB_NAME") ?? "monitoring";
+    var dbUser = Environment.GetEnvironmentVariable("DB_USER") ?? "postgres";
+    var dbPass = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "postgres";
+    connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
+}
+// Override the config value so GetConnectionString picks it up
+builder.Configuration["ConnectionStrings:DefaultConnection"] = connectionString;
 
 // EF Core PostgreSQL
 builder.Services.AddDbContext<MonitoringDbContext>(options =>
@@ -91,6 +108,9 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<MonitoringDbContext>();
     await db.Database.MigrateAsync();
+
+    // Seed RBAC data (permissions, roles, super admin)
+    await RbacSeeder.SeedAsync(db, builder.Configuration);
 
     // Seed default alert rules if none exist
     if (!await db.AlertRules.AnyAsync())

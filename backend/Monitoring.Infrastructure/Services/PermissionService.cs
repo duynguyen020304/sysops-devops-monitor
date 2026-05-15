@@ -1,55 +1,53 @@
-using Monitoring.Core.Enums;
+using Microsoft.EntityFrameworkCore;
 using Monitoring.Core.Interfaces;
+using Monitoring.Infrastructure.Data;
 
 namespace Monitoring.Infrastructure.Services;
 
 public class PermissionService : IPermissionService
 {
-    public bool HasPermission(UserRole role, string permission)
+    private readonly MonitoringDbContext _db;
+
+    // Scoped cache: load permissions once per request per user
+    private Guid? _cachedUserId;
+    private HashSet<string>? _cachedPermissions;
+
+    public PermissionService(MonitoringDbContext db)
     {
-        return permission.ToLowerInvariant() switch
-        {
-            "manage_workspace" => CanManageWorkspace(role),
-            "manage_users" => CanManageUsers(role),
-            "connect_repos" => CanConnectRepos(role),
-            "connect_agents" => CanConnectAgents(role),
-            "view_dashboards" => true,
-            "view_actions_logs" => true,
-            "view_pm2_logs" => role is not UserRole.Viewer,
-            "configure_alerts" => CanConfigureAlerts(role),
-            "acknowledge_alerts" => role is not UserRole.Viewer,
-            "resolve_alerts" => CanResolveAlerts(role),
-            "manage_retention" => CanManageRetention(role),
-            "view_metrics" => CanViewMetrics(role),
-            "manage_alerts" => CanManageAlerts(role),
-            _ => false
-        };
+        _db = db;
     }
 
-    public bool CanManageUsers(UserRole role)
-        => role is UserRole.Owner or UserRole.Admin;
+    public async Task<bool> HasPermissionAsync(Guid userId, string permission)
+    {
+        var permissions = await GetOrLoadPermissionsAsync(userId);
+        return permissions.Contains(permission.ToUpperInvariant());
+    }
 
-    public bool CanManageWorkspace(UserRole role)
-        => role is UserRole.Owner;
+    public async Task<bool> HasAnyPermissionAsync(Guid userId, params string[] permissions)
+    {
+        var userPerms = await GetOrLoadPermissionsAsync(userId);
+        return permissions.Any(p => userPerms.Contains(p.ToUpperInvariant()));
+    }
 
-    public bool CanConnectRepos(UserRole role)
-        => role is UserRole.Owner or UserRole.Admin or UserRole.DevOpsEngineer;
+    public async Task<IReadOnlyList<string>> GetUserPermissionsAsync(Guid userId)
+    {
+        var permissions = await GetOrLoadPermissionsAsync(userId);
+        return permissions.ToList().AsReadOnly();
+    }
 
-    public bool CanConnectAgents(UserRole role)
-        => role is UserRole.Owner or UserRole.Admin or UserRole.DevOpsEngineer;
+    private async Task<HashSet<string>> GetOrLoadPermissionsAsync(Guid userId)
+    {
+        if (_cachedUserId == userId && _cachedPermissions != null)
+            return _cachedPermissions;
 
-    public bool CanConfigureAlerts(UserRole role)
-        => role is UserRole.Owner or UserRole.Admin or UserRole.DevOpsEngineer;
+        _cachedPermissions = await _db.UserRoles
+            .Where(ur => ur.UserId == userId)
+            .Join(_db.RolePermissions, ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => rp.PermissionId)
+            .Join(_db.Permissions, permId => permId, p => p.Id, (_, p) => p.NormalizedName)
+            .Distinct()
+            .ToHashSetAsync();
 
-    public bool CanResolveAlerts(UserRole role)
-        => role is UserRole.Owner or UserRole.Admin or UserRole.DevOpsEngineer;
-
-    public bool CanManageRetention(UserRole role)
-        => role is UserRole.Owner or UserRole.Admin;
-
-    public bool CanViewMetrics(UserRole role)
-        => true;
-
-    public bool CanManageAlerts(UserRole role)
-        => role is UserRole.Owner or UserRole.Admin or UserRole.DevOpsEngineer;
+        _cachedUserId = userId;
+        return _cachedPermissions;
+    }
 }

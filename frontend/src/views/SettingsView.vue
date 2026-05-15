@@ -12,7 +12,7 @@ const activeTab = ref<'workspace' | 'rules' | 'retention'>('workspace')
 const showRuleForm = ref(false)
 const editingRule = ref<AlertRule | null>(null)
 
-const isAdmin = computed(() => auth.user?.role === 'Owner' || auth.user?.role === 'Admin')
+const isAdmin = computed(() => auth.hasRole('Owner') || auth.hasRole('Admin') || auth.hasRole('Super Admin'))
 
 // Retention settings
 const retention = ref({
@@ -98,7 +98,7 @@ function saveRetention() {
           <div class="flex items-center justify-between">
             <span class="text-sm text-[var(--color-text-secondary)]">Role</span>
             <span class="rounded bg-blue-500/20 px-2 py-0.5 text-xs font-semibold uppercase text-blue-400">
-              {{ auth.user?.role }}
+              {{ auth.user?.roles?.join(', ') ?? '—' }}
             </span>
           </div>
         </div>

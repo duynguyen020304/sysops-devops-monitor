@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Monitoring.Api.Filters;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Interfaces;
 
@@ -18,6 +19,7 @@ public class LogsController : ControllerBase
     }
 
     [HttpGet("search")]
+    [RequirePermission("view_audit_logs")]
     public async Task<ActionResult<LogSearchResult>> SearchLogs(
         [FromQuery] string? keyword,
         [FromQuery] DateTimeOffset? from,
