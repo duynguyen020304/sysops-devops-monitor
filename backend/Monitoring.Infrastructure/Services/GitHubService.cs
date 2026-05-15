@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -46,6 +47,7 @@ public class GitHubService : IGitHubService
             Id = Guid.NewGuid(),
             WorkspaceId = workspaceId,
             Provider = "github",
+            AccessToken = githubToken,
             Owner = owner,
             Name = name,
             FullName = repoInfo.Full_Name,
@@ -102,7 +104,9 @@ public class GitHubService : IGitHubService
         var repository = await _db.Repositories.FindAsync(repositoryId)
             ?? throw new InvalidOperationException("Repository not found.");
 
-        SetAuthHeader(repository.Provider); // uses stored token approach
+        if (string.IsNullOrEmpty(repository.AccessToken))
+            throw new InvalidOperationException("Repository has no access token. Please re-connect the repository.");
+        SetAuthHeader(repository.AccessToken);
 
         var response = await _httpClient.GetAsync(
             $"/repos/{repository.Owner}/{repository.Name}/actions/runs?per_page=50");
@@ -189,16 +193,34 @@ public class GitHubService : IGitHubService
             return existingLogs;
 
         // Fetch from GitHub
-        SetAuthHeader(repository.Provider);
+        if (string.IsNullOrEmpty(repository.AccessToken))
+            throw new InvalidOperationException("Repository has no access token. Please re-connect the repository.");
+        SetAuthHeader(repository.AccessToken);
 
+        // GitHub returns 302 redirect to a .zip archive containing .txt log files
         var response = await _httpClient.GetAsync(
             $"/repos/{repository.Owner}/{repository.Name}/actions/runs/{githubRunId}/logs");
 
         CheckRateLimit(response);
         response.EnsureSuccessStatusCode();
 
-        var logContent = await response.Content.ReadAsStringAsync();
-        var logs = ParseLogContent(logContent, workflowRun.Id);
+        var zipBytes = await response.Content.ReadAsByteArrayAsync();
+        var logs = new List<WorkflowLog>();
+
+        using (var zipStream = new MemoryStream(zipBytes))
+        using (var archive = new System.IO.Compression.ZipArchive(zipStream, ZipArchiveMode.Read))
+        {
+            foreach (var entry in archive.Entries)
+            {
+                if (!entry.FullName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var jobName = Path.GetFileNameWithoutExtension(entry.Name);
+                using var reader = new StreamReader(entry.Open());
+                var content = await reader.ReadToEndAsync();
+                logs.AddRange(ParseLogContent(content, workflowRun.Id, jobName));
+            }
+        }
 
         _db.WorkflowLogs.AddRange(logs);
         await _db.SaveChangesAsync();
@@ -259,12 +281,12 @@ public class GitHubService : IGitHubService
         }
     }
 
-    private static List<WorkflowLog> ParseLogContent(string logContent, Guid workflowRunId)
+    private static List<WorkflowLog> ParseLogContent(string logContent, Guid workflowRunId, string jobName = "unknown")
     {
         var logs = new List<WorkflowLog>();
         var lines = logContent.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        var currentJob = "unknown";
+        var currentJob = jobName;
         var currentStep = "unknown";
 
         foreach (var line in lines)

@@ -110,7 +110,7 @@ const summaryCards = [
     icon: 'M13 17h8m0 0V9m0 8l-8-8-4 4-6-6',
     color: 'text-orange-400',
     bgColor: 'bg-orange-500/10',
-    getValue: () => `${(getAverageFailureRate() * 100).toFixed(1)}%`,
+    getValue: () => `${getAverageFailureRate().toFixed(1)}%`,
     link: '/repositories',
   },
 ]

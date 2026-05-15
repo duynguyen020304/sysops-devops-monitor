@@ -14,5 +14,6 @@ public class Repository
     public required string Visibility { get; set; }
     public long GithubRepositoryId { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string? AccessToken { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

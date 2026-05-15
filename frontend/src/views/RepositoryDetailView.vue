@@ -68,8 +68,11 @@ async function viewLogs(run: WorkflowRun) {
   showLogs.value = true
   logsLoading.value = true
   try {
-    const { data } = await repositoriesApi.getWorkflowLogs(repoId.value, run.id)
-    logs.value = data
+    const { data } = await repositoriesApi.getWorkflowLogs(repoId.value, run.githubRunId)
+    logs.value = (data.items ?? []).map((log: WorkflowLog) => ({
+      ...log,
+      source: [log.jobName, log.stepName].filter(Boolean).join(' / '),
+    }))
   } catch {
     logs.value = []
   } finally {
@@ -212,7 +215,7 @@ onMounted(loadRepoData)
         </div>
 
         <!-- Stats cards -->
-        <div v-if="stats" class="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div v-if="stats" class="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
             <p class="text-xs text-[var(--color-text-secondary)]">Total Runs</p>
             <p class="mt-1 text-2xl font-bold text-[var(--color-text)]">{{ stats.totalRuns }}</p>
@@ -226,8 +229,12 @@ onMounted(loadRepoData)
             <p class="mt-1 text-2xl font-bold text-red-400">{{ stats.failedRuns }}</p>
           </div>
           <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+            <p class="text-xs text-[var(--color-text-secondary)]">Cancelled</p>
+            <p class="mt-1 text-2xl font-bold text-yellow-400">{{ stats.cancelledRuns }}</p>
+          </div>
+          <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
             <p class="text-xs text-[var(--color-text-secondary)]">Failure Rate</p>
-            <p class="mt-1 text-2xl font-bold text-orange-400">{{ (stats.failureRate * 100).toFixed(1) }}%</p>
+            <p class="mt-1 text-2xl font-bold text-orange-400">{{ stats.failureRate.toFixed(1) }}%</p>
           </div>
         </div>
 
@@ -381,7 +388,7 @@ onMounted(loadRepoData)
             <div class="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
           </div>
 
-          <div v-else class="flex-1 overflow-hidden p-4">
+          <div v-else class="flex flex-1 flex-col overflow-hidden p-4">
             <LogViewer :logs="logs" />
           </div>
         </div>

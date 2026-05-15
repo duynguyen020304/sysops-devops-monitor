@@ -84,8 +84,8 @@ export const repositoriesApi = {
     }),
   getWorkflowDetail: (repoId: string, runId: string) =>
     api.get<WorkflowRun>(`/repositories/${repoId}/workflows/${runId}`),
-  getWorkflowLogs: (repoId: string, runId: string) =>
-    api.get<WorkflowLog[]>(`/repositories/${repoId}/workflows/${runId}/logs`),
+  getWorkflowLogs: (repoId: string, runId: number) =>
+    api.get<PagedResult<WorkflowLog>>(`/repositories/${repoId}/workflows/${runId}/logs`),
   getStats: (id: string) =>
     api.get<RepositoryStats>(`/repositories/${id}/stats`),
 }

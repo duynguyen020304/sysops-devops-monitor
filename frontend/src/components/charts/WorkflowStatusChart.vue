@@ -53,7 +53,7 @@ const bars = computed(() => [
       </div>
     </div>
     <div class="mt-4 border-t border-[var(--color-border)] pt-3 text-center text-xs text-[var(--color-text-secondary)]">
-      Failure rate: <span class="font-medium text-red-400">{{ (props.stats.failureRate * 100).toFixed(1) }}%</span>
+      Failure rate: <span class="font-medium text-red-400">{{ props.stats.failureRate.toFixed(1) }}%</span>
     </div>
   </div>
 </template>
