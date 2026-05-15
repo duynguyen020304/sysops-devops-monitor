@@ -32,7 +32,7 @@ public class AgentController : ControllerBase
     [HttpPost("heartbeat")]
     public async Task<IActionResult> Heartbeat([FromBody] AgentHeartbeatRequest request)
     {
-        if (!ValidateAgentToken())
+        if (!await ValidateAgentTokenAsync())
             return Unauthorized(new { message = "Invalid agent token." });
 
         try
@@ -49,7 +49,7 @@ public class AgentController : ControllerBase
     [HttpPost("metrics")]
     public async Task<IActionResult> SubmitMetrics([FromBody] AgentMetricsRequest request)
     {
-        if (!ValidateAgentToken())
+        if (!await ValidateAgentTokenAsync())
             return Unauthorized(new { message = "Invalid agent token." });
 
         try
@@ -66,7 +66,7 @@ public class AgentController : ControllerBase
     [HttpPost("pm2")]
     public async Task<IActionResult> SubmitPM2Data([FromBody] AgentPM2Request request)
     {
-        if (!ValidateAgentToken())
+        if (!await ValidateAgentTokenAsync())
             return Unauthorized(new { message = "Invalid agent token." });
 
         try
@@ -83,7 +83,7 @@ public class AgentController : ControllerBase
     [HttpPost("logs")]
     public async Task<IActionResult> SubmitLogs([FromBody] AgentLogsRequest request)
     {
-        if (!ValidateAgentToken())
+        if (!await ValidateAgentTokenAsync())
             return Unauthorized(new { message = "Invalid agent token." });
 
         // Verify server exists
@@ -121,16 +121,29 @@ public class AgentController : ControllerBase
         return Ok(new { message = $"Recorded {request.Logs.Count} log entries." });
     }
 
-    private bool ValidateAgentToken()
+    private async Task<bool> ValidateAgentTokenAsync()
     {
+        var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            var bearerToken = authHeader["Bearer ".Length..].Trim();
+            var serverIdHeader = Request.Headers["X-Server-Id"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(serverIdHeader) && Guid.TryParse(serverIdHeader, out var serverId))
+            {
+                var server = await _db.Servers.FindAsync(serverId);
+                if (server is not null && string.Equals(server.ServerToken, bearerToken, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+
         var headerToken = Request.Headers["X-Agent-Token"].FirstOrDefault();
-        if (string.IsNullOrEmpty(headerToken))
-            return false;
+        if (!string.IsNullOrEmpty(headerToken))
+        {
+            var configuredToken = _config["AgentSettings:Token"];
+            if (!string.IsNullOrEmpty(configuredToken))
+                return string.Equals(headerToken, configuredToken, StringComparison.Ordinal);
+        }
 
-        var configuredToken = _config["AgentSettings:Token"];
-        if (string.IsNullOrEmpty(configuredToken))
-            return false;
-
-        return string.Equals(headerToken, configuredToken, StringComparison.Ordinal);
+        return false;
     }
 }

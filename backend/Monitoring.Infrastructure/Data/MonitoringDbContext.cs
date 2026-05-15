@@ -17,6 +17,7 @@ public class MonitoringDbContext : DbContext
     public DbSet<WorkflowRun> WorkflowRuns => Set<WorkflowRun>();
     public DbSet<WorkflowLog> WorkflowLogs => Set<WorkflowLog>();
     public DbSet<Server> Servers => Set<Server>();
+    public DbSet<AgentInstallToken> AgentInstallTokens => Set<AgentInstallToken>();
     public DbSet<PM2Process> PM2Processes => Set<PM2Process>();
     public DbSet<PM2Log> PM2Logs => Set<PM2Log>();
     public DbSet<ServerMetric> ServerMetrics => Set<ServerMetric>();
@@ -145,9 +146,21 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.IpAddress).IsRequired().HasMaxLength(45);
             e.Property(x => x.OperatingSystem).IsRequired().HasMaxLength(128);
             e.Property(x => x.AgentVersion).IsRequired().HasMaxLength(32);
+            e.Property(x => x.ServerToken).HasMaxLength(128);
             e.Property(x => x.SshUsername).HasMaxLength(128);
             e.Property(x => x.SshPort).HasDefaultValue(22);
             e.Property(x => x.SshPrivateKeyPath).HasMaxLength(512);
+            e.HasIndex(x => x.WorkspaceId);
+        });
+
+        // AgentInstallToken
+        modelBuilder.Entity<AgentInstallToken>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Token).IsRequired().HasMaxLength(64);
+            e.Property(x => x.PasswordHash).IsRequired();
+            e.Property(x => x.ServerName).IsRequired().HasMaxLength(256);
+            e.HasIndex(x => x.Token).IsUnique();
             e.HasIndex(x => x.WorkspaceId);
         });
 

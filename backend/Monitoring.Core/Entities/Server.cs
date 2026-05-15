@@ -10,6 +10,7 @@ public class Server
     public required string IpAddress { get; set; }
     public required string OperatingSystem { get; set; }
     public required string AgentVersion { get; set; }
+    public string? ServerToken { get; set; }
     public string? SshUsername { get; set; } = "root";
     public int SshPort { get; set; } = 22;
     public string? SshPrivateKeyPath { get; set; }
