@@ -10,9 +10,32 @@ const store = useRepositoriesStore()
 const { isMobile, isTablet } = useMediaQuery()
 
 const showConnectDialog = ref(false)
-const connectForm = ref({ githubToken: '', owner: '', name: '' })
+const connectForm = ref({ githubToken: '', repoUrl: '' })
 const connectError = ref<string | null>(null)
 const connecting = ref(false)
+
+const GITHUB_REPO_REGEX = /^https:\/\/github\.com\/([a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)\/([a-zA-Z0-9._\-]+)\/?$/
+
+const parsedOwner = ref<string | null>(null)
+const parsedName = ref<string | null>(null)
+const urlError = ref<string | null>(null)
+
+function parseRepoUrl() {
+  urlError.value = null
+  parsedOwner.value = null
+  parsedName.value = null
+
+  const url = connectForm.value.repoUrl.trim()
+  if (!url) return
+
+  const match = url.match(GITHUB_REPO_REGEX)
+  if (match) {
+    parsedOwner.value = match[1]
+    parsedName.value = match[2]
+  } else {
+    urlError.value = 'Invalid GitHub URL. Example: https://github.com/user/repo'
+  }
+}
 
 onMounted(() => {
   store.fetchRepositories()
@@ -23,16 +46,29 @@ function openRepo(id: string) {
 }
 
 async function handleConnect() {
+  parseRepoUrl()
+  if (urlError.value || !parsedOwner.value || !parsedName.value) {
+    if (!urlError.value) urlError.value = 'Please enter a valid GitHub repository URL.'
+    return
+  }
+  if (!connectForm.value.githubToken.trim()) {
+    connectError.value = 'GitHub token is required.'
+    return
+  }
+
   connectError.value = null
   connecting.value = true
   try {
     await store.connectRepository(
-      connectForm.value.githubToken,
-      connectForm.value.owner,
-      connectForm.value.name
+      connectForm.value.githubToken.trim(),
+      parsedOwner.value,
+      parsedName.value
     )
     showConnectDialog.value = false
-    connectForm.value = { githubToken: '', owner: '', name: '' }
+    connectForm.value = { githubToken: '', repoUrl: '' }
+    parsedOwner.value = null
+    parsedName.value = null
+    urlError.value = null
   } catch {
     connectError.value = 'Failed to connect repository. Check your credentials.'
   } finally {
@@ -200,24 +236,34 @@ function visibilityBadge(visibility: string): string {
               />
             </div>
             <div>
-              <label class="mb-1.5 block text-sm font-medium text-[var(--color-text)]">Owner</label>
+              <label class="mb-1.5 block text-sm font-medium text-[var(--color-text)]">Repository URL</label>
               <input
-                v-model="connectForm.owner"
-                type="text"
+                v-model="connectForm.repoUrl"
+                type="url"
                 required
-                placeholder="e.g. octocat"
-                class="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-sm text-[var(--color-text)] placeholder-[var(--color-text-secondary)] outline-none focus:border-blue-500"
+                placeholder="https://github.com/user/repo"
+                :class="[
+                  'w-full rounded-lg border bg-[var(--color-bg)] px-3 py-2.5 text-sm text-[var(--color-text)] placeholder-[var(--color-text-secondary)] outline-none',
+                  urlError ? 'border-red-500 focus:border-red-500' : 'border-[var(--color-border)] focus:border-blue-500',
+                ]"
+                @input="parseRepoUrl"
               />
-            </div>
-            <div>
-              <label class="mb-1.5 block text-sm font-medium text-[var(--color-text)]">Repository Name</label>
-              <input
-                v-model="connectForm.name"
-                type="text"
-                required
-                placeholder="e.g. hello-world"
-                class="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-sm text-[var(--color-text)] placeholder-[var(--color-text-secondary)] outline-none focus:border-blue-500"
-              />
+              <p v-if="urlError" class="mt-1 text-xs text-red-400">{{ urlError }}</p>
+              <div
+                v-if="parsedOwner && parsedName && !urlError"
+                class="mt-2 flex items-center gap-3 rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-2"
+              >
+                <svg class="h-4 w-4 text-green-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <div class="text-xs">
+                  <span class="text-[var(--color-text-secondary)]">Owner:</span>
+                  <span class="font-medium text-[var(--color-text)]">{{ parsedOwner }}</span>
+                  <span class="mx-1.5 text-[var(--color-text-secondary)]">·</span>
+                  <span class="text-[var(--color-text-secondary)]">Repo:</span>
+                  <span class="font-medium text-[var(--color-text)]">{{ parsedName }}</span>
+                </div>
+              </div>
             </div>
 
             <div class="flex justify-end gap-3 pt-2">
