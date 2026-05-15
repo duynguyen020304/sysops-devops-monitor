@@ -1,0 +1,313 @@
+using System.Net.Http.Headers;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Monitoring.Core.DTOs;
+using Monitoring.Core.Entities;
+using Monitoring.Core.Interfaces;
+using Monitoring.Infrastructure.Data;
+
+namespace Monitoring.Infrastructure.Services;
+
+public class GitHubService : IGitHubService
+{
+    private readonly MonitoringDbContext _db;
+    private readonly HttpClient _httpClient;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    public GitHubService(MonitoringDbContext db, IHttpClientFactory httpClientFactory)
+    {
+        _db = db;
+        _httpClient = httpClientFactory.CreateClient("GitHub");
+    }
+
+    public async Task<Repository> ConnectRepositoryAsync(Guid workspaceId, string githubToken, string owner, string name)
+    {
+        // Validate token and fetch repo info from GitHub
+        SetAuthHeader(githubToken);
+
+        var response = await _httpClient.GetAsync($"/repos/{owner}/{name}");
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        var repoInfo = JsonSerializer.Deserialize<GitHubRepoInfo>(json, JsonOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize GitHub repo info.");
+
+        // Check if already connected
+        var existing = await _db.Repositories
+            .FirstOrDefaultAsync(r => r.GithubRepositoryId == repoInfo.Id);
+        if (existing is not null)
+            throw new InvalidOperationException("This repository is already connected.");
+
+        var repository = new Repository
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = workspaceId,
+            Provider = "github",
+            Owner = owner,
+            Name = name,
+            FullName = repoInfo.Full_Name,
+            DefaultBranch = repoInfo.Default_Branch,
+            Visibility = repoInfo.Visibility ?? "private",
+            GithubRepositoryId = repoInfo.Id,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        _db.Repositories.Add(repository);
+        await _db.SaveChangesAsync();
+
+        return repository;
+    }
+
+    public async Task<List<Repository>> GetRepositoriesAsync(Guid workspaceId)
+    {
+        return await _db.Repositories
+            .Where(r => r.WorkspaceId == workspaceId)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<Repository?> GetRepositoryAsync(Guid repositoryId)
+    {
+        return await _db.Repositories.FindAsync(repositoryId);
+    }
+
+    public async Task DisconnectRepositoryAsync(Guid repositoryId)
+    {
+        var repository = await _db.Repositories.FindAsync(repositoryId)
+            ?? throw new InvalidOperationException("Repository not found.");
+
+        // Remove associated workflow runs and logs
+        var runs = await _db.WorkflowRuns
+            .Where(r => r.RepositoryId == repositoryId)
+            .ToListAsync();
+
+        var runIds = runs.Select(r => r.Id).ToList();
+        var logs = await _db.WorkflowLogs
+            .Where(l => runIds.Contains(l.WorkflowRunId))
+            .ToListAsync();
+
+        _db.WorkflowLogs.RemoveRange(logs);
+        _db.WorkflowRuns.RemoveRange(runs);
+        _db.Repositories.Remove(repository);
+
+        await _db.SaveChangesAsync();
+    }
+
+    public async Task<List<WorkflowRun>> SyncWorkflowRunsAsync(Guid repositoryId)
+    {
+        var repository = await _db.Repositories.FindAsync(repositoryId)
+            ?? throw new InvalidOperationException("Repository not found.");
+
+        SetAuthHeader(repository.Provider); // uses stored token approach
+
+        var response = await _httpClient.GetAsync(
+            $"/repos/{repository.Owner}/{repository.Name}/actions/runs?per_page=50");
+
+        CheckRateLimit(response);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        var runsResponse = JsonSerializer.Deserialize<GitHubWorkflowRunsResponse>(json, JsonOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize workflow runs.");
+
+        var existingRuns = await _db.WorkflowRuns
+            .Where(r => r.RepositoryId == repositoryId)
+            .ToDictionaryAsync(r => r.GithubRunId);
+
+        var result = new List<WorkflowRun>();
+
+        foreach (var ghRun in runsResponse.Workflow_Runs)
+        {
+            if (existingRuns.TryGetValue(ghRun.Id, out var existing))
+            {
+                // Update existing run
+                existing.Status = ghRun.Status;
+                existing.Conclusion = ghRun.Conclusion;
+                existing.CompletedAt = ghRun.Updated_At;
+
+                if (ghRun.Status == "completed" && ghRun.Updated_At.HasValue)
+                {
+                    var duration = (ghRun.Updated_At.Value - ghRun.Created_At).TotalSeconds;
+                    existing.DurationSeconds = (int)duration;
+                }
+
+                result.Add(existing);
+            }
+            else
+            {
+                // Insert new run
+                var workflowRun = new WorkflowRun
+                {
+                    Id = Guid.NewGuid(),
+                    RepositoryId = repositoryId,
+                    WorkflowName = ghRun.Name,
+                    GithubRunId = ghRun.Id,
+                    Branch = ghRun.Head_Branch,
+                    CommitSha = ghRun.Head_Sha,
+                    CommitMessage = "", // not available in the list endpoint
+                    Actor = ghRun.Actor.Login,
+                    EventType = ghRun.Event,
+                    Status = ghRun.Status,
+                    Conclusion = ghRun.Conclusion,
+                    StartedAt = ghRun.Created_At,
+                    CompletedAt = ghRun.Updated_At,
+                    DurationSeconds = ghRun.Status == "completed" && ghRun.Updated_At.HasValue
+                        ? (int)(ghRun.Updated_At.Value - ghRun.Created_At).TotalSeconds
+                        : null,
+                    HtmlUrl = ghRun.Html_Url
+                };
+
+                _db.WorkflowRuns.Add(workflowRun);
+                result.Add(workflowRun);
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        return result;
+    }
+
+    public async Task<List<WorkflowLog>> GetWorkflowLogsAsync(Guid repositoryId, long githubRunId)
+    {
+        var repository = await _db.Repositories.FindAsync(repositoryId)
+            ?? throw new InvalidOperationException("Repository not found.");
+
+        var workflowRun = await _db.WorkflowRuns
+            .FirstOrDefaultAsync(r => r.RepositoryId == repositoryId && r.GithubRunId == githubRunId)
+            ?? throw new InvalidOperationException("Workflow run not found.");
+
+        // Check if logs already cached
+        var existingLogs = await _db.WorkflowLogs
+            .Where(l => l.WorkflowRunId == workflowRun.Id)
+            .OrderBy(l => l.Timestamp)
+            .ToListAsync();
+
+        if (existingLogs.Count > 0)
+            return existingLogs;
+
+        // Fetch from GitHub
+        SetAuthHeader(repository.Provider);
+
+        var response = await _httpClient.GetAsync(
+            $"/repos/{repository.Owner}/{repository.Name}/actions/runs/{githubRunId}/logs");
+
+        CheckRateLimit(response);
+        response.EnsureSuccessStatusCode();
+
+        var logContent = await response.Content.ReadAsStringAsync();
+        var logs = ParseLogContent(logContent, workflowRun.Id);
+
+        _db.WorkflowLogs.AddRange(logs);
+        await _db.SaveChangesAsync();
+
+        return logs;
+    }
+
+    public async Task<RepositoryStatsDto> GetRepositoryStatsAsync(Guid repositoryId)
+    {
+        var repository = await _db.Repositories.FindAsync(repositoryId)
+            ?? throw new InvalidOperationException("Repository not found.");
+
+        var runs = await _db.WorkflowRuns
+            .Where(r => r.RepositoryId == repositoryId)
+            .ToListAsync();
+
+        var totalRuns = runs.Count;
+        var successfulRuns = runs.Count(r => r.Conclusion == "success");
+        var failedRuns = runs.Count(r => r.Conclusion == "failure");
+        var cancelledRuns = runs.Count(r => r.Conclusion == "cancelled");
+
+        var completedRuns = runs.Where(r => r.DurationSeconds.HasValue).ToList();
+        var averageDuration = completedRuns.Count > 0
+            ? completedRuns.Average(r => r.DurationSeconds!.Value)
+            : 0;
+
+        var failureRate = totalRuns > 0
+            ? (double)failedRuns / totalRuns * 100
+            : 0;
+
+        return new RepositoryStatsDto(
+            TotalRuns: totalRuns,
+            SuccessfulRuns: successfulRuns,
+            FailedRuns: failedRuns,
+            CancelledRuns: cancelledRuns,
+            AverageDuration: Math.Round(averageDuration, 2),
+            FailureRate: Math.Round(failureRate, 2)
+        );
+    }
+
+    private void SetAuthHeader(string token)
+    {
+        _httpClient.DefaultRequestHeaders.Authorization = null;
+        _httpClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+    }
+
+    private static void CheckRateLimit(HttpResponseMessage response)
+    {
+        if (response.Headers.TryGetValues("X-RateLimit-Remaining", out var values))
+        {
+            var remaining = values.FirstOrDefault();
+            if (int.TryParse(remaining, out var count) && count <= 10)
+            {
+                // Log warning about approaching rate limit
+                Console.WriteLine($"GitHub API rate limit approaching: {remaining} requests remaining.");
+            }
+        }
+    }
+
+    private static List<WorkflowLog> ParseLogContent(string logContent, Guid workflowRunId)
+    {
+        var logs = new List<WorkflowLog>();
+        var lines = logContent.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        var currentJob = "unknown";
+        var currentStep = "unknown";
+
+        foreach (var line in lines)
+        {
+            // Parse job/step headers from log format
+            if (line.StartsWith("##[group]"))
+            {
+                var group = line["##[group]".Length..].Trim();
+                if (group.Contains('('))
+                {
+                    currentJob = group[..group.IndexOf('(')].Trim();
+                }
+                continue;
+            }
+
+            if (line.StartsWith("##[section]"))
+            {
+                currentStep = line["##[section]".Length..].Trim();
+                continue;
+            }
+
+            // Determine log level
+            var level = "info";
+            var lower = line.ToLowerInvariant();
+            if (lower.Contains("error") || lower.Contains("fatal"))
+                level = "error";
+            else if (lower.Contains("warning") || lower.Contains("warn"))
+                level = "warning";
+
+            logs.Add(new WorkflowLog
+            {
+                Id = Guid.NewGuid(),
+                WorkflowRunId = workflowRunId,
+                JobName = currentJob,
+                StepName = currentStep,
+                Timestamp = DateTimeOffset.UtcNow,
+                Level = level,
+                Message = line.Length > 4000 ? line[..4000] : line,
+                RawMessage = line,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        return logs;
+    }
+}
