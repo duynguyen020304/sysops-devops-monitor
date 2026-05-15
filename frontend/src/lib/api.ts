@@ -20,6 +20,7 @@ import type {
   AlertListRequest,
   AlertListResult,
   CreateAlertRuleRequest,
+  DeployAgentResponse,
 } from '@/types'
 
 const api = axios.create({
@@ -96,6 +97,8 @@ export const serversApi = {
   getMetrics: (id: string, from?: string, to?: string) =>
     api.get<ServerMetric[]>(`/servers/${id}/metrics`, { params: { from, to } }),
   getHealth: (id: string) => api.get<ServerHealth>(`/servers/${id}/health`),
+  deployAgent: (id: string) =>
+    api.post<DeployAgentResponse>(`/servers/${id}/deploy-agent`),
 }
 
 export const pm2Api = {

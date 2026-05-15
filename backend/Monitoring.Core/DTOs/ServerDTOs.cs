@@ -1,7 +1,7 @@
 namespace Monitoring.Core.DTOs;
 
-public record RegisterServerRequest(string Hostname, string IpAddress, string OperatingSystem, string AgentVersion);
-public record ServerDto(Guid Id, string Hostname, string IpAddress, string OperatingSystem, string AgentVersion, string Status, DateTimeOffset? LastHeartbeatAt, DateTime CreatedAt);
+public record RegisterServerRequest(string Hostname, string IpAddress, string OperatingSystem, string AgentVersion, string? SshUsername = null, int? SshPort = null, string? SshPrivateKeyPath = null);
+public record ServerDto(Guid Id, string Hostname, string IpAddress, string OperatingSystem, string AgentVersion, string Status, DateTimeOffset? LastHeartbeatAt, DateTime CreatedAt, string? SshUsername, int SshPort, string? SshPrivateKeyPath);
 public record ServerHealthDto(string Status, DateTimeOffset? LastHeartbeatAt, int PM2ProcessCount, int AlertCount);
 public record AgentHeartbeatRequest(Guid ServerId);
 public record AgentMetricsRequest(Guid ServerId, SystemMetricsDto Metrics);

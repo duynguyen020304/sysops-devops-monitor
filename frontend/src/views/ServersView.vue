@@ -46,6 +46,15 @@ function formatTimeAgo(dateStr: string | null): string {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
   return `${Math.floor(diff / 86400)}d ago`
 }
+
+async function deployAgent(serverId: string, event: MouseEvent) {
+  event.stopPropagation()
+  try {
+    await store.deployAgent(serverId)
+  } catch {
+    // shown via store.error
+  }
+}
 </script>
 
 <template>
@@ -125,6 +134,18 @@ function formatTimeAgo(dateStr: string | null): string {
             <span>Last heartbeat</span>
             <span class="font-medium text-[var(--color-text)]">{{ formatTimeAgo(server.lastHeartbeatAt) }}</span>
           </div>
+        </div>
+        <div class="mt-4 flex items-center gap-2 border-t border-[var(--color-border)] pt-4">
+          <button
+            class="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="store.deploying"
+            @click="deployAgent(server.id, $event)"
+          >
+            {{ store.deploying ? 'Deploying...' : 'Deploy Agent' }}
+          </button>
+          <span v-if="store.deployResult" class="text-xs" :class="store.deployResult.success ? 'text-green-400' : 'text-red-400'">
+            {{ store.deployResult.success ? 'Deploy ok' : 'Deploy failed' }}
+          </span>
         </div>
       </div>
     </div>

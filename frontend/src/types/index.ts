@@ -4,6 +4,16 @@ export interface User {
   email: string
   role: 'Owner' | 'Admin' | 'DevOpsEngineer' | 'Developer' | 'Viewer'
   createdAt: string
+  sshUsername: string | null
+  sshPort: number
+  sshPrivateKeyPath: string | null
+}
+
+export interface DeployAgentResponse {
+  success: boolean
+  output: string
+  error: string | null
+  deployedAt: string
 }
 
 export interface AuthResponse {

@@ -15,11 +15,13 @@ namespace Monitoring.Api.Controllers;
 public class ServersController : ControllerBase
 {
     private readonly IServerService _serverService;
+    private readonly IDeployService _deployService;
     private readonly MonitoringDbContext _db;
 
-    public ServersController(IServerService serverService, MonitoringDbContext db)
+    public ServersController(IServerService serverService, IDeployService deployService, MonitoringDbContext db)
     {
         _serverService = serverService;
+        _deployService = deployService;
         _db = db;
     }
 
@@ -89,6 +91,22 @@ public class ServersController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{id:guid}/deploy-agent")]
+    public async Task<ActionResult<DeployAgentResponse>> DeployAgent(Guid id, CancellationToken ct)
+    {
+        var server = await _serverService.GetServerAsync(id);
+        if (server is null)
+            return NotFound();
+
+        var workspaceId = GetWorkspaceId();
+        if (server.WorkspaceId != workspaceId)
+            return Forbid();
+
+        var result = await _deployService.DeployAgentAsync(id, ct);
+        var response = new DeployAgentResponse(result.Success, result.Output, result.Error, DateTimeOffset.UtcNow);
+        return result.Success ? Ok(response) : StatusCode(502, response);
+    }
+
     [HttpGet("{id:guid}/metrics")]
     public async Task<ActionResult<List<ServerMetric>>> GetMetrics(
         Guid id,
@@ -151,7 +169,10 @@ public class ServersController : ControllerBase
             AgentVersion: server.AgentVersion,
             Status: server.Status.ToString(),
             LastHeartbeatAt: server.LastHeartbeatAt,
-            CreatedAt: server.CreatedAt
+            CreatedAt: server.CreatedAt,
+            SshUsername: server.SshUsername,
+            SshPort: server.SshPort,
+            SshPrivateKeyPath: server.SshPrivateKeyPath
         );
     }
 }

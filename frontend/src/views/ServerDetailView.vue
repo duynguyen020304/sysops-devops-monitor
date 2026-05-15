@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { serversApi, pm2Api } from '@/lib/api'
-import type { Server, ServerHealth, ServerMetric, PM2Process } from '@/types'
+import type { DeployAgentResponse, Server, ServerHealth, ServerMetric, PM2Process } from '@/types'
 import MetricChart from '@/components/charts/MetricChart.vue'
 import ProcessStatusBadge from '@/components/common/ProcessStatusBadge.vue'
 
@@ -18,6 +18,8 @@ const loading = ref(true)
 const metricsLoading = ref(false)
 const activeTab = ref<'metrics' | 'pm2' | 'alerts'>('metrics')
 const timeRange = ref('1h')
+const deploying = ref(false)
+const deployResult = ref<DeployAgentResponse | null>(null)
 
 onMounted(async () => {
   loading.value = true
@@ -75,6 +77,19 @@ const memData = computed(() => metrics.value.map((m) => m.memoryUsagePercent))
 const diskData = computed(() => metrics.value.map((m) => m.diskUsagePercent))
 const networkRxData = computed(() => metrics.value.map((m) => m.networkRxBytesPerSecond))
 const networkTxData = computed(() => metrics.value.map((m) => m.networkTxBytesPerSecond))
+async function deployAgent() {
+  deploying.value = true
+  deployResult.value = null
+  try {
+    const { data } = await serversApi.deployAgent(serverId)
+    deployResult.value = data
+  } catch (err: any) {
+    deployResult.value = err?.response?.data ?? { success: false, output: '', error: 'Deploy failed', deployedAt: new Date().toISOString() }
+  } finally {
+    deploying.value = false
+  }
+}
+
 const loadData = computed(() => metrics.value.map((m) => m.loadAverage1m))
 const metricLabels = computed(() =>
   metrics.value.map((m) => new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
@@ -166,10 +181,28 @@ function formatMemory(bytes: number): string {
             {{ server.ipAddress }} &middot; {{ server.operatingSystem }} &middot; Agent v{{ server.agentVersion }}
           </p>
         </div>
-        <div class="ml-10 flex items-center gap-4 text-xs text-[var(--color-text-secondary)] sm:ml-0">
+        <div class="ml-10 flex flex-wrap items-center gap-4 text-xs text-[var(--color-text-secondary)] sm:ml-0">
+          <button
+            class="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="deploying"
+            @click="deployAgent"
+          >
+            {{ deploying ? 'Deploying...' : 'Deploy Agent' }}
+          </button>
           <span>Last heartbeat: <span class="font-medium text-[var(--color-text)]">{{ formatTimeAgo(server.lastHeartbeatAt) }}</span></span>
           <span v-if="health">Alerts: <span class="font-medium text-red-400">{{ health.alertCount }}</span></span>
         </div>
+      </div>
+
+      <div v-if="deployResult" class="mb-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+        <div class="mb-2 text-sm font-medium" :class="deployResult.success ? 'text-green-400' : 'text-red-400'">
+          {{ deployResult.success ? 'Agent deployed' : 'Agent deploy failed' }}
+        </div>
+        <p v-if="deployResult.error" class="mb-2 text-sm text-red-400">{{ deployResult.error }}</p>
+        <details class="text-xs text-[var(--color-text-secondary)]">
+          <summary class="cursor-pointer">Deploy output</summary>
+          <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-bg-tertiary)] p-3">{{ deployResult.output }}</pre>
+        </details>
       </div>
 
       <!-- Tabs -->

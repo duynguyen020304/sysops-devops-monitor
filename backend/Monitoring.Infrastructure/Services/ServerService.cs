@@ -26,6 +26,9 @@ public class ServerService : IServerService
             IpAddress = request.IpAddress,
             OperatingSystem = request.OperatingSystem,
             AgentVersion = request.AgentVersion,
+            SshUsername = string.IsNullOrWhiteSpace(request.SshUsername) ? "root" : request.SshUsername,
+            SshPort = request.SshPort is > 0 ? request.SshPort.Value : 22,
+            SshPrivateKeyPath = request.SshPrivateKeyPath,
             Status = ServerStatus.Unknown,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -59,6 +62,9 @@ public class ServerService : IServerService
         server.IpAddress = request.IpAddress;
         server.OperatingSystem = request.OperatingSystem;
         server.AgentVersion = request.AgentVersion;
+        server.SshUsername = string.IsNullOrWhiteSpace(request.SshUsername) ? "root" : request.SshUsername;
+        server.SshPort = request.SshPort is > 0 ? request.SshPort.Value : 22;
+        server.SshPrivateKeyPath = request.SshPrivateKeyPath;
         server.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();

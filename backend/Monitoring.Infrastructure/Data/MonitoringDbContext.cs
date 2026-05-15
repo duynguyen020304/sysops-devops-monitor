@@ -91,6 +91,9 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.IpAddress).IsRequired().HasMaxLength(45);
             e.Property(x => x.OperatingSystem).IsRequired().HasMaxLength(128);
             e.Property(x => x.AgentVersion).IsRequired().HasMaxLength(32);
+            e.Property(x => x.SshUsername).HasMaxLength(128);
+            e.Property(x => x.SshPort).HasDefaultValue(22);
+            e.Property(x => x.SshPrivateKeyPath).HasMaxLength(512);
             e.HasIndex(x => x.WorkspaceId);
         });
 

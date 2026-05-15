@@ -59,6 +59,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IGitHubService, GitHubService>();
 builder.Services.AddScoped<IServerService, ServerService>();
+builder.Services.AddScoped<IDeployService, DeployService>();
 builder.Services.AddScoped<IPM2Service, PM2Service>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ILogService, LogService>();
