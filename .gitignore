@@ -11,3 +11,17 @@ omx/
 
 # Claude Code
 .claude/
+
+# Node.js
+node_modules/
+
+# .NET build outputs
+bin/
+obj/
+publish/
+*.user
+*.suo
+*.cache
+
+# Agent dist
+agent/dist/
