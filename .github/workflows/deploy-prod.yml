@@ -26,13 +26,14 @@ jobs:
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
           export NVM_DIR="$HOME/.nvm"
           [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-          nvm install 24
-          NODE_BIN=$(dirname $(nvm which current))
+          nvm install 24.14.0
+          NODE_BIN="/root/.nvm/versions/node/v24.14.0/bin"
+          PNPM_BIN="/root/.nvm/versions/node/v24.14.0/bin/pnpm"
           echo "Node.js bin directory: $NODE_BIN"
           echo "$NODE_BIN" >> $GITHUB_PATH
           node -v
           corepack enable pnpm
-          pnpm -v
+          "$PNPM_BIN" -v
 
       # ------------------------------------------
       # Build Vue.js Frontend
@@ -42,8 +43,8 @@ jobs:
           VITE_API_URL: ${{ secrets.BACKEND_URL }}
         run: |
           cd frontend
-          pnpm install
-          pnpm run build
+          /root/.nvm/versions/node/v24.14.0/bin/pnpm install
+          /root/.nvm/versions/node/v24.14.0/bin/pnpm run build
 
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
@@ -79,8 +80,8 @@ jobs:
       - name: Install & Build Agent
         run: |
           cd agent
-          pnpm install
-          pnpm run build
+          /root/.nvm/versions/node/v24.14.0/bin/pnpm install
+          /root/.nvm/versions/node/v24.14.0/bin/pnpm run build
 
       - name: Upload Agent Artifact
         uses: actions/upload-artifact@v4
