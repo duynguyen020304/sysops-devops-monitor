@@ -342,8 +342,6 @@ jobs:
           echo "Writing agent .env..."
           cat > /root/Monitoring/agent/.env << 'EOF'
           API_URL=http://localhost:5000
-          SERVER_TOKEN=${{ secrets.AGENT_TOKEN }}
-          SERVER_ID=${{ secrets.AGENT_SERVER_ID }}
           METRICS_INTERVAL=30000
           HEARTBEAT_INTERVAL=60000
           EOF
