@@ -31,6 +31,59 @@ export interface RegisterRequest {
   password: string
 }
 
+export interface UserWithRoles {
+  id: string
+  name: string
+  email: string
+  roles: string[]
+  permissions: string[]
+  status: string
+  createdAt: string
+}
+
+export interface Role {
+  id: string
+  name: string
+  description: string | null
+  isSystem: boolean
+  createdAt?: string
+}
+
+export interface RoleDetail {
+  id: string
+  name: string
+  description: string | null
+  isSystem: boolean
+  permissions: string[]
+  createdAt: string
+}
+
+export interface Permission {
+  id: string
+  name: string
+  category: string | null
+  description: string | null
+}
+
+export interface CreateRoleRequest {
+  name: string
+  description: string | null
+  permissionNames: string[]
+}
+
+export interface UpdateRoleRequest {
+  name?: string | null
+  description?: string | null
+  permissionNames?: string[] | null
+}
+
+export interface CreateUserRequest {
+  name: string
+  email: string
+  password: string
+  roleIds?: string[]
+}
+
 export interface Repository {
   id: string
   owner: string
@@ -248,6 +301,29 @@ export interface LogSearchResult {
   pageSize: number
 }
 
+
+export interface AgentInstallToken {
+  id: string
+  token: string
+  serverName: string
+  downloadUrl: string
+  pageUrl: string
+  plainPassword: string
+  expiresAt: string
+  usedAt: string | null
+  revokedAt: string | null
+  status: 'active' | 'used' | 'expired' | 'revoked'
+}
+
+export interface AgentInstallTokenList {
+  id: string
+  serverName: string
+  createdAt: string
+  expiresAt: string
+  usedAt: string | null
+  revokedAt: string | null
+  status: 'active' | 'used' | 'expired' | 'revoked'
+}
 export interface MetricTimeSeries {
   timestamp: string
   value: number

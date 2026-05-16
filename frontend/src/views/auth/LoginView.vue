@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { RouterLink } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 
 const { login } = useAuth()
@@ -78,10 +77,6 @@ async function handleSubmit() {
           <span v-else>Sign in</span>
         </button>
 
-        <p class="mt-4 text-center text-sm text-[var(--color-text-secondary)]">
-          Don't have an account?
-          <RouterLink to="/register" class="font-medium text-blue-400 hover:text-blue-300">Create one</RouterLink>
-        </p>
       </form>
     </div>
   </div>

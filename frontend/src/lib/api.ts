@@ -21,6 +21,8 @@ import type {
   AlertListResult,
   CreateAlertRuleRequest,
   DeployAgentResponse,
+  AgentInstallToken,
+  AgentInstallTokenList,
 } from '@/types'
 
 const api = axios.create({
@@ -141,6 +143,14 @@ export const alertRulesApi = {
     api.put<AlertRule>(`/alerts/rules/${id}`, data),
   delete: (id: string) =>
     api.delete(`/alerts/rules/${id}`),
+}
+
+export const agentInstallApi = {
+  listTokens: () => api.get<AgentInstallTokenList[]>('/agent-install/tokens'),
+  generateToken: (data: { serverName: string }) =>
+    api.post<AgentInstallToken>('/agent-install/tokens', data),
+  revokeToken: (id: string) =>
+    api.post(`/agent-install/tokens/${id}/revoke`),
 }
 
 export default api

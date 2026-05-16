@@ -14,11 +14,6 @@ export function useAuth() {
     router.push('/')
   }
 
-  async function register(name: string, email: string, password: string) {
-    await authStore.register(name, email, password)
-    router.push('/')
-  }
-
   function logout() {
     authStore.logout()
     router.push('/login')
@@ -28,7 +23,6 @@ export function useAuth() {
     isAuthenticated,
     user,
     login,
-    register,
     logout,
   }
 }

@@ -114,6 +114,7 @@ public class ServersController : ControllerBase
     }
 
     [HttpGet("{id:guid}/metrics")]
+    [RequirePermission("view_metrics")]
     public async Task<ActionResult<List<ServerMetric>>> GetMetrics(
         Guid id,
         [FromQuery] DateTimeOffset? from,

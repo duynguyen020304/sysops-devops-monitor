@@ -1,6 +1,6 @@
 namespace Monitoring.Core.DTOs;
 
-public record GenerateInstallTokenRequest(string ServerName, string Password);
+public record GenerateInstallTokenRequest(string ServerName);
 
 public record InstallTokenResponse(
     Guid Id,
@@ -8,6 +8,7 @@ public record InstallTokenResponse(
     string ServerName,
     string DownloadUrl,
     string PageUrl,
+    string PlainPassword,
     DateTime ExpiresAt,
     string Status
 );

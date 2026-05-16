@@ -46,6 +46,7 @@ public class LogsController : ControllerBase
     }
 
     [HttpGet("stream")]
+    [RequirePermission("view_audit_logs")]
     public IActionResult StreamLogs()
     {
         // Placeholder for future SSE/SignalR real-time log streaming

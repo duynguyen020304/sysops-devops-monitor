@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Interfaces;
+using Monitoring.Api.Filters;
 using System.Security.Claims;
 
 namespace Monitoring.Api.Controllers;
@@ -17,6 +18,8 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
+    [Authorize]
+    [RequirePermission("manage_users")]
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
     {
@@ -68,6 +71,10 @@ public class AuthController : ControllerBase
         catch (UnauthorizedAccessException ex)
         {
             return Unauthorized(new { message = ex.Message });
+        }
+        catch (Microsoft.IdentityModel.Tokens.SecurityTokenException)
+        {
+            return Unauthorized(new { message = "Invalid token." });
         }
     }
 

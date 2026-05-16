@@ -36,14 +36,15 @@ public class AgentInstallController : ControllerBase
     public async Task<IActionResult> GenerateToken([FromBody] GenerateInstallTokenRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.ServerName)) return BadRequest(new { message = "Server name is required." });
-        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 4) return BadRequest(new { message = "Password must be at least 4 characters." });
         var user = await _db.Users.FindAsync(GetUserId());
         if (user is null) return Unauthorized();
-        var now = DateTime.UtcNow; var token = GenerateSecureToken();
-        var installToken = new AgentInstallToken { Id = Guid.NewGuid(), Token = token, PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password), ServerName = request.ServerName, CreatedBy = user.Id, CreatedAt = now, ExpiresAt = now.AddHours(1), WorkspaceId = user.WorkspaceId };
+        var now = DateTime.UtcNow;
+        var token = GenerateSecureToken();
+        var password = GeneratePlainPassword();
+        var installToken = new AgentInstallToken { Id = Guid.NewGuid(), Token = token, PasswordHash = BCrypt.Net.BCrypt.HashPassword(password), ServerName = request.ServerName, CreatedBy = user.Id, CreatedAt = now, ExpiresAt = now.AddHours(1), WorkspaceId = user.WorkspaceId };
         _db.AgentInstallTokens.Add(installToken); await _db.SaveChangesAsync();
         var baseUrl = GetBaseUrl();
-        return Ok(new InstallTokenResponse(installToken.Id, token, request.ServerName, $"{baseUrl}/api/agent-install/download?t={token}&pw={Uri.EscapeDataString(request.Password)}", $"{baseUrl}/api/agent-install/page?t={token}", installToken.ExpiresAt, "active"));
+        return Ok(new InstallTokenResponse(installToken.Id, token, request.ServerName, $"{baseUrl}/api/agent-install/download?t={token}&pw={Uri.EscapeDataString(password)}", $"{baseUrl}/api/agent-install/page?t={token}", password, installToken.ExpiresAt, "active"));
     }
 
     [HttpPost("tokens/{id:guid}/revoke"), Authorize, RequirePermission("deploy_agents")]
@@ -142,6 +143,16 @@ public class AgentInstallController : ControllerBase
     private Guid GetUserId() { var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier); return claim is not null ? Guid.Parse(claim.Value) : Guid.Empty; }
     private string GetBaseUrl() => $"{Request.Scheme}://{Request.Host.Value}";
     private static string GenerateSecureToken() { var bytes = new byte[24]; RandomNumberGenerator.Fill(bytes); return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", ""); }
+    private static string GeneratePlainPassword()
+    {
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+        Span<byte> bytes = stackalloc byte[16];
+        RandomNumberGenerator.Fill(bytes);
+        var sb = new StringBuilder(16);
+        foreach (var b in bytes) sb.Append(chars[b % chars.Length]);
+        return sb.ToString();
+    }
+
     private static void CopyDirectory(string sourceDir, string destDir)
     {
         Directory.CreateDirectory(destDir);

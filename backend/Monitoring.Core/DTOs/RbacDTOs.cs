@@ -49,3 +49,10 @@ public record UserWithRolesDto(
 public record AssignRoleRequest(
     Guid RoleId
 );
+
+public record CreateUserRequest(
+    string Name,
+    string Email,
+    string Password,
+    List<Guid>? RoleIds
+);

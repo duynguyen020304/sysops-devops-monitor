@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useRepositoriesStore } from '@/stores/repositories'
 import { repositoriesApi } from '@/lib/api'
 import { useMediaQuery } from '@/composables/useMediaQuery'
 import type { WorkflowRun, RepositoryStats } from '@/types'
 
 const router = useRouter()
+const route = useRoute()
 const repoStore = useRepositoriesStore()
 const { isMobile, isTablet } = useMediaQuery()
+
+const showForbiddenNotice = computed(() => route.query.forbidden === '1')
+function dismissForbidden() {
+  router.replace({ path: '/', query: {} })
+}
 
 const recentFailures = ref<WorkflowRun[]>([])
 const repoStats = ref<Map<string, RepositoryStats>>(new Map())
@@ -117,6 +123,26 @@ const summaryCards = [
 </script>
 
 <template>
+  <!-- Access denied notice -->
+  <div
+    v-if="showForbiddenNotice"
+    class="mx-auto max-w-7xl px-4 pt-4 md:px-6"
+  >
+    <div class="flex items-center justify-between rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3">
+      <div class="flex items-center gap-3">
+        <svg class="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+        </svg>
+        <p class="text-sm text-red-400">You don't have permission to access that page.</p>
+      </div>
+      <button @click="dismissForbidden" class="text-red-400 hover:text-red-300">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
   <div>
     <div class="mb-6">
       <h2 class="text-xl font-bold text-[var(--color-text)]">Overview</h2>

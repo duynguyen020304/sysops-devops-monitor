@@ -13,7 +13,7 @@ export function authGuard(
   } else if (to.meta.guest && authStore.isAuthenticated) {
     next({ path: '/' })
   } else if (to.meta.requiredPermission && !authStore.hasPermission(to.meta.requiredPermission as string)) {
-    next({ path: '/' }) // redirect home if no permission
+    next({ path: '/', query: { forbidden: '1' } }) // redirect home if no permission
   } else {
     next()
   }

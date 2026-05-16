@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Monitoring.Api.Filters;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Entities;
+using Monitoring.Core.Interfaces;
 using Monitoring.Infrastructure.Data;
 
 namespace Monitoring.Api.Controllers;
@@ -14,10 +15,12 @@ namespace Monitoring.Api.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly MonitoringDbContext _db;
+    private readonly IAuthService _authService;
 
-    public UsersController(MonitoringDbContext db)
+    public UsersController(MonitoringDbContext db, IAuthService authService)
     {
         _db = db;
+        _authService = authService;
     }
 
     [HttpGet]
@@ -57,6 +60,23 @@ public class UsersController : ControllerBase
         }
 
         return Ok(result);
+    }
+
+    [HttpPost]
+    [RequirePermission("manage_users")]
+    public async Task<ActionResult<UserWithRolesDto>> CreateUser([FromBody] CreateUserRequest request)
+    {
+        try
+        {
+            var workspaceId = GetWorkspaceId();
+            var grantedByUserId = GetUserId();
+            var result = await _authService.CreateUserInWorkspaceAsync(workspaceId, request, grantedByUserId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
     }
 
     [HttpGet("{id:guid}")]
@@ -138,6 +158,33 @@ public class UsersController : ControllerBase
             .ToListAsync();
 
         return Ok(permissions);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [RequirePermission("manage_users")]
+    public async Task<IActionResult> DeleteUser(Guid id)
+    {
+        var user = await _db.Users.FindAsync(id);
+        if (user is null)
+            return NotFound();
+
+        var workspaceId = GetWorkspaceId();
+        if (user.WorkspaceId != workspaceId)
+            return Forbid();
+
+        // Prevent self-deletion
+        var currentUserId = GetUserId();
+        if (user.Id == currentUserId)
+            return BadRequest(new { message = "Cannot delete your own account." });
+
+        // Remove user roles
+        var userRoles = await _db.UserRoles.Where(ur => ur.UserId == id).ToListAsync();
+        _db.UserRoles.RemoveRange(userRoles);
+
+        _db.Users.Remove(user);
+        await _db.SaveChangesAsync();
+
+        return NoContent();
     }
 
     private Guid GetWorkspaceId()

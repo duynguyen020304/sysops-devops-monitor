@@ -23,6 +23,7 @@ public class MonitoringDbContext : DbContext
     public DbSet<ServerMetric> ServerMetrics => Set<ServerMetric>();
     public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<AlertRule> AlertRules => Set<AlertRule>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -209,6 +210,19 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.Name).IsRequired().HasMaxLength(256);
             e.Property(x => x.ConditionType).IsRequired().HasMaxLength(128);
             e.HasIndex(x => x.WorkspaceId);
+        });
+
+        // RefreshToken
+        modelBuilder.Entity<RefreshToken>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Token).IsRequired().HasMaxLength(256);
+            e.HasIndex(x => x.Token).IsUnique();
+            e.HasIndex(x => x.UserId);
+            e.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

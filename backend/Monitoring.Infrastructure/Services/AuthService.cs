@@ -89,21 +89,102 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> RefreshTokenAsync(RefreshTokenRequest request)
     {
-        var principal = GetPrincipalFromExpiredToken(request.RefreshToken)
-            ?? throw new UnauthorizedAccessException("Invalid refresh token.");
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            throw new UnauthorizedAccessException("Invalid refresh token.");
 
-        var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? throw new UnauthorizedAccessException("Invalid refresh token.");
+        // Look up the refresh token in DB
+        var storedToken = await _db.RefreshTokens
+            .Include(rt => rt.User)
+            .FirstOrDefaultAsync(rt => rt.Token == request.RefreshToken);
 
-        var user = await _db.Users.FindAsync(Guid.Parse(userIdClaim))
-            ?? throw new UnauthorizedAccessException("User not found.");
+        if (storedToken == null)
+            throw new UnauthorizedAccessException("Invalid refresh token.");
+        if (storedToken.IsRevoked)
+            throw new UnauthorizedAccessException("Refresh token has been revoked.");
+        if (storedToken.IsExpired)
+            throw new UnauthorizedAccessException("Refresh token has expired.");
+        if (storedToken.User.Status != UserStatus.Active)
+            throw new UnauthorizedAccessException("User account is not active.");
 
-        return await BuildAuthResponseAsync(user);
+        // Revoke old token
+        storedToken.RevokedAt = DateTime.UtcNow;
+
+        // Build new auth response (generates + persists new refresh token)
+        return await BuildAuthResponseAsync(storedToken.User);
     }
 
-    public Task RevokeRefreshTokenAsync(string refreshToken)
+    public async Task RevokeRefreshTokenAsync(string refreshToken)
     {
-        return Task.CompletedTask;
+        var storedToken = await _db.RefreshTokens
+            .FirstOrDefaultAsync(rt => rt.Token == refreshToken);
+        if (storedToken != null)
+        {
+            storedToken.RevokedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+    }
+
+    public async Task<UserWithRolesDto> CreateUserInWorkspaceAsync(Guid workspaceId, CreateUserRequest request, Guid grantedByUserId)
+    {
+        var existingUser = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+        if (existingUser is not null)
+            throw new InvalidOperationException("A user with this email already exists.");
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = workspaceId,
+            Name = request.Name,
+            Email = request.Email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            Status = UserStatus.Active,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        _db.Users.Add(user);
+
+        // Assign roles
+        var roleIds = request.RoleIds;
+        if (roleIds is null || roleIds.Count == 0)
+        {
+            // Default to Viewer role
+            var viewerRole = await _db.Roles.FirstOrDefaultAsync(r => r.NormalizedName == "VIEWER");
+            if (viewerRole is not null)
+                roleIds = new List<Guid> { viewerRole.Id };
+        }
+
+        if (roleIds is not null)
+        {
+            foreach (var roleId in roleIds)
+            {
+                _db.UserRoles.Add(new UserRoleEntity
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    RoleId = roleId,
+                    GrantedByUserId = grantedByUserId,
+                    GrantedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        await _db.SaveChangesAsync();
+
+        // Build response
+        var roles = await _db.UserRoles
+            .Where(ur => ur.UserId == user.Id)
+            .Join(_db.Roles, ur => ur.RoleId, r => r.Id, (_, r) => r.Name)
+            .ToListAsync();
+
+        var permissions = await _db.UserRoles
+            .Where(ur => ur.UserId == user.Id)
+            .Join(_db.RolePermissions, ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => rp.PermissionId)
+            .Join(_db.Permissions, permId => permId, p => p.Id, (_, p) => p.Name)
+            .Distinct()
+            .ToListAsync();
+
+        return new UserWithRolesDto(user.Id, user.Name, user.Email, roles, permissions, user.Status.ToString(), user.CreatedAt);
     }
 
     public string GenerateJwtToken(User user, string roles, string permissions)
@@ -159,6 +240,18 @@ public class AuthService : IAuthService
         var refreshToken = GenerateRefreshToken();
         var expiresMinutes = int.Parse(_config.GetSection("JwtSettings")["ExpiresInMinutes"] ?? "60");
 
+        // Persist refresh token
+        var refreshTokenEntity = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            Token = refreshToken,
+            UserId = user.Id,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.RefreshTokens.Add(refreshTokenEntity);
+        await _db.SaveChangesAsync();
+
         return new AuthResponse(
             Token: token,
             RefreshToken: refreshToken,
@@ -184,6 +277,13 @@ public class AuthService : IAuthService
 
     private ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
     {
+        if (string.IsNullOrWhiteSpace(token))
+            return null;
+
+        token = token.Trim();
+        if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            token = token[7..];
+
         var jwtSettings = _config.GetSection("JwtSettings");
         var secretKey = jwtSettings["SecretKey"]
             ?? throw new InvalidOperationException("JWT SecretKey is not configured.");
