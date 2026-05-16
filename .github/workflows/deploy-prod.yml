@@ -331,8 +331,6 @@ jobs:
           export JwtSettings__Audience='${{ secrets.JWT_AUDIENCE }}'
           export JwtSettings__ExpirationMinutes='${{ secrets.JWT_EXPIRATION_MINUTES }}'
           export JwtSettings__RefreshTokenExpirationDays='${{ secrets.JWT_REFRESH_EXPIRATION_DAYS }}'
-          export GoogleOAuth__ClientId='${{ secrets.GOOGLE_CLIENT_ID }}'
-          export GoogleOAuth__ClientSecret='${{ secrets.GOOGLE_CLIENT_SECRET }}'
           export AgentSettings__Token='${{ secrets.AGENT_TOKEN }}'
           export AllowedOrigins__0='${{ secrets.FRONTEND_URL }}'
           EOF
