@@ -268,9 +268,8 @@ jobs:
           FRONTEND_PORT='${FRONTEND_PORT}'
 
           echo "Requested ports: backend=\${BACKEND_PORT}, frontend=\${FRONTEND_PORT}"
-          PM2_BIN="/root/.bun/bin/pm2"
           echo "PM2 process list before deploy:"
-          "$PM2_BIN" list || true
+          /root/.bun/bin/pm2 list || true
           echo "Listeners on requested ports before stopping this app:"
           if command -v ss >/dev/null 2>&1; then
             ss -ltnp 2>/dev/null | awk -v b=":\${BACKEND_PORT}" -v f=":\${FRONTEND_PORT}" '\$4 ~ b"$" || \$4 ~ f"$" {print}' || true
