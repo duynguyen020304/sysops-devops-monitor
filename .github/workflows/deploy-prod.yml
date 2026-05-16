@@ -105,6 +105,8 @@ jobs:
       DEPLOY_HOST: ${{ secrets.PRODUCTION_SERVER_HOST }}
       DEPLOY_PORT: ${{ secrets.PRODUCTION_SERVER_PORT }}
       DEPLOY_USER: ${{ secrets.PRODUCTION_SERVER_USER }}
+      BACKEND_PORT: ${{ secrets.BACKEND_PORT || vars.BACKEND_PORT || '5000' }}
+      FRONTEND_PORT: ${{ secrets.FRONTEND_PORT || vars.FRONTEND_PORT || '3000' }}
       CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
       CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
 
@@ -254,6 +256,30 @@ jobs:
           SSH_CONFIG_FILE="$HOME/.ssh/config"
           timeout 60s ssh -F "$SSH_CONFIG_FILE" -o BatchMode=yes -o ConnectTimeout=30 monitoring-deploy 'echo "Connected to $(hostname)"'
 
+      - name: Inspect requested app ports on server
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH_CONFIG_FILE="$HOME/.ssh/config"
+          ssh -F "$SSH_CONFIG_FILE" monitoring-deploy 'bash -se' << REMOTE_PORT_INSPECT
+          set -euo pipefail
+
+          BACKEND_PORT='${BACKEND_PORT}'
+          FRONTEND_PORT='${FRONTEND_PORT}'
+
+          echo "Requested ports: backend=\${BACKEND_PORT}, frontend=\${FRONTEND_PORT}"
+          echo "PM2 process list before deploy:"
+          pm2 list || true
+          echo "Listeners on requested ports before stopping this app:"
+          if command -v ss >/dev/null 2>&1; then
+            ss -ltnp 2>/dev/null | awk -v b=":\${BACKEND_PORT}" -v f=":\${FRONTEND_PORT}" '\$4 ~ b"$" || \$4 ~ f"$" {print}' || true
+          elif command -v netstat >/dev/null 2>&1; then
+            netstat -ltnp 2>/dev/null | awk -v b=":\${BACKEND_PORT}" -v f=":\${FRONTEND_PORT}" '\$4 ~ b"$" || \$4 ~ f"$" {print}' || true
+          else
+            echo "::warning::Neither ss nor netstat found; cannot inspect listeners."
+          fi
+          REMOTE_PORT_INSPECT
+
       # ------------------------------------------
       # Deploy Frontend to Server
       # ------------------------------------------
@@ -297,6 +323,25 @@ jobs:
 
           echo "=== Starting Deployment ==="
 
+          BACKEND_PORT='${{ secrets.BACKEND_PORT || vars.BACKEND_PORT || '5000' }}'
+          FRONTEND_PORT='${{ secrets.FRONTEND_PORT || vars.FRONTEND_PORT || '3000' }}'
+
+          validate_port() {
+            local name="$1"
+            local port="$2"
+            if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+              echo "::error::${name} must be a TCP port 1-65535. Got '${port}'."
+              exit 1
+            fi
+          }
+
+          validate_port BACKEND_PORT "$BACKEND_PORT"
+          validate_port FRONTEND_PORT "$FRONTEND_PORT"
+          if [ "$BACKEND_PORT" = "$FRONTEND_PORT" ]; then
+            echo "::error::BACKEND_PORT and FRONTEND_PORT must be different. Both are ${BACKEND_PORT}."
+            exit 1
+          fi
+
           # ==========================================
           # 1. Setup .NET Runtime
           # ==========================================
@@ -324,9 +369,9 @@ jobs:
           # 3. Create Backend Runtime Environment
           # ==========================================
           echo "Writing backend runtime-env.sh..."
-          cat > /root/Monitoring/backend/runtime-env.sh << 'EOF'
+          cat > /root/Monitoring/backend/runtime-env.sh << EOF
           export ASPNETCORE_ENVIRONMENT='Production'
-          export ASPNETCORE_URLS='http://localhost:5000'
+          export ASPNETCORE_URLS="http://localhost:${BACKEND_PORT}"
           export ConnectionStrings__DefaultConnection='${{ secrets.POSTGRESQL_CONNECTION_STRING }}'
           export JwtSettings__SecretKey='${{ secrets.JWT_SECRET_KEY }}'
           export JwtSettings__Issuer='${{ secrets.JWT_ISSUER }}'
@@ -341,8 +386,8 @@ jobs:
           # 4. Create Agent Environment
           # ==========================================
           echo "Writing agent .env..."
-          cat > /root/Monitoring/agent/.env << 'EOF'
-          API_URL=http://localhost:5000
+          cat > /root/Monitoring/agent/.env << EOF
+          API_URL=http://localhost:${BACKEND_PORT}
           METRICS_INTERVAL=30000
           HEARTBEAT_INTERVAL=60000
           EOF
@@ -428,7 +473,7 @@ jobs:
           if ! command -v http-server &> /dev/null; then
             pnpm install -g http-server
           fi
-          pm2 start http-server --name "monitoring-frontend" -- /root/Monitoring/frontend/dist -p 3000 -c-1 --spa
+          pm2 start http-server --name "monitoring-frontend" -- /root/Monitoring/frontend/dist -p "$FRONTEND_PORT" -c-1 --spa
 
           # Start Backend
           pm2 start /root/Monitoring/backend/start.sh --name "monitoring-api"
