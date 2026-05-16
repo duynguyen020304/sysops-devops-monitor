@@ -477,7 +477,7 @@ jobs:
           if ! command -v http-server &> /dev/null; then
             /root/.nvm/versions/node/v24.14.0/bin/pnpm install -g http-server
           fi
-          "$PM2_BIN" start http-server --name "monitoring-frontend" -- /root/Monitoring/frontend/dist -p "$FRONTEND_PORT" -c-1 --spa
+          "$PM2_BIN" start /root/.local/share/pnpm/bin/http-server --name "monitoring-frontend" --interpreter bash -- /root/Monitoring/frontend/dist -p "$FRONTEND_PORT" -c-1 --spa
 
           # Start Backend
           "$PM2_BIN" start /root/Monitoring/backend/start.sh --name "monitoring-api"
