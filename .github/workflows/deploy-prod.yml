@@ -268,8 +268,9 @@ jobs:
           FRONTEND_PORT='${FRONTEND_PORT}'
 
           echo "Requested ports: backend=\${BACKEND_PORT}, frontend=\${FRONTEND_PORT}"
+          PM2_BIN="/root/.bun/bin/pm2"
           echo "PM2 process list before deploy:"
-          pm2 list || true
+          "$PM2_BIN" list || true
           echo "Listeners on requested ports before stopping this app:"
           if command -v ss >/dev/null 2>&1; then
             ss -ltnp 2>/dev/null | awk -v b=":\${BACKEND_PORT}" -v f=":\${FRONTEND_PORT}" '\$4 ~ b"$" || \$4 ~ f"$" {print}' || true
@@ -325,6 +326,7 @@ jobs:
 
           export PNPM_HOME="/root/.local/share/pnpm"
           export PATH="/root/.nvm/versions/node/v24.14.0/bin:${PNPM_HOME}:${PNPM_HOME}/bin:${PATH}"
+          PM2_BIN="/root/.bun/bin/pm2"
 
           BACKEND_PORT='${{ secrets.BACKEND_PORT || vars.BACKEND_PORT || '5000' }}'
           FRONTEND_PORT='${{ secrets.FRONTEND_PORT || vars.FRONTEND_PORT || '3000' }}'
@@ -400,9 +402,9 @@ jobs:
           # 5. Stop PM2 Processes
           # ==========================================
           echo "Stopping PM2 processes..."
-          pm2 stop monitoring-frontend 2>/dev/null || true
-          pm2 stop monitoring-api 2>/dev/null || true
-          pm2 stop monitoring-agent 2>/dev/null || true
+          "$PM2_BIN" stop monitoring-frontend 2>/dev/null || true
+          "$PM2_BIN" stop monitoring-api 2>/dev/null || true
+          "$PM2_BIN" stop monitoring-agent 2>/dev/null || true
 
           # ==========================================
           # 6. Deploy Frontend (Static Files)
@@ -468,24 +470,24 @@ jobs:
           # 9. Restart PM2 Processes
           # ==========================================
           echo "Restarting PM2 processes..."
-          pm2 delete monitoring-frontend 2>/dev/null || true
-          pm2 delete monitoring-api 2>/dev/null || true
-          pm2 delete monitoring-agent 2>/dev/null || true
+          "$PM2_BIN" delete monitoring-frontend 2>/dev/null || true
+          "$PM2_BIN" delete monitoring-api 2>/dev/null || true
+          "$PM2_BIN" delete monitoring-agent 2>/dev/null || true
 
           # Serve frontend static via Node.js http-server
           if ! command -v http-server &> /dev/null; then
             /root/.nvm/versions/node/v24.14.0/bin/pnpm install -g http-server
           fi
-          pm2 start http-server --name "monitoring-frontend" -- /root/Monitoring/frontend/dist -p "$FRONTEND_PORT" -c-1 --spa
+          "$PM2_BIN" start http-server --name "monitoring-frontend" -- /root/Monitoring/frontend/dist -p "$FRONTEND_PORT" -c-1 --spa
 
           # Start Backend
-          pm2 start /root/Monitoring/backend/start.sh --name "monitoring-api"
+          "$PM2_BIN" start /root/Monitoring/backend/start.sh --name "monitoring-api"
 
           # Start Agent
-          pm2 start /root/Monitoring/agent/dist/index.js --name "monitoring-agent" --cwd /root/Monitoring/agent
+          "$PM2_BIN" start /root/Monitoring/agent/dist/index.js --name "monitoring-agent" --cwd /root/Monitoring/agent
 
           # Save PM2 state
-          pm2 save
+          "$PM2_BIN" save
 
           # ==========================================
           # 10. Cleanup Old Backups
@@ -503,5 +505,5 @@ jobs:
           echo "=== Deployment Completed Successfully ==="
 
           # Show PM2 status
-          pm2 status
+          "$PM2_BIN" status
           REMOTE_SCRIPT
