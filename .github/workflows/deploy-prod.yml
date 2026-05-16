@@ -26,14 +26,13 @@ jobs:
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
           export NVM_DIR="$HOME/.nvm"
           [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-          nvm install 24.14.0
-          NODE_BIN="/root/.nvm/versions/node/v24.14.0/bin"
-          PNPM_BIN="/root/.nvm/versions/node/v24.14.0/bin/pnpm"
+          nvm install 24
+          NODE_BIN=$(dirname $(nvm which current))
           echo "Node.js bin directory: $NODE_BIN"
           echo "$NODE_BIN" >> $GITHUB_PATH
           node -v
           corepack enable pnpm
-          "$PNPM_BIN" -v
+          pnpm -v
 
       # ------------------------------------------
       # Build Vue.js Frontend
@@ -43,8 +42,8 @@ jobs:
           VITE_API_URL: ${{ secrets.BACKEND_URL }}
         run: |
           cd frontend
-          /root/.nvm/versions/node/v24.14.0/bin/pnpm install
-          /root/.nvm/versions/node/v24.14.0/bin/pnpm run build
+          pnpm install
+          pnpm run build
 
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
@@ -80,8 +79,8 @@ jobs:
       - name: Install & Build Agent
         run: |
           cd agent
-          /root/.nvm/versions/node/v24.14.0/bin/pnpm install
-          /root/.nvm/versions/node/v24.14.0/bin/pnpm run build
+          pnpm install
+          pnpm run build
 
       - name: Upload Agent Artifact
         uses: actions/upload-artifact@v4
@@ -460,7 +459,7 @@ jobs:
 
           # Install agent dependencies
           echo "Installing agent dependencies..."
-          pnpm install --prod
+          /root/.nvm/versions/node/v24.14.0/bin/pnpm install --prod
 
           # ==========================================
           # 9. Restart PM2 Processes
@@ -472,7 +471,7 @@ jobs:
 
           # Serve frontend static via Node.js http-server
           if ! command -v http-server &> /dev/null; then
-            pnpm install -g http-server
+            /root/.nvm/versions/node/v24.14.0/bin/pnpm install -g http-server
           fi
           pm2 start http-server --name "monitoring-frontend" -- /root/Monitoring/frontend/dist -p "$FRONTEND_PORT" -c-1 --spa
 
