@@ -323,6 +323,9 @@ jobs:
 
           echo "=== Starting Deployment ==="
 
+          export PNPM_HOME="/root/.local/share/pnpm"
+          export PATH="/root/.nvm/versions/node/v24.14.0/bin:${PNPM_HOME}:${PNPM_HOME}/bin:${PATH}"
+
           BACKEND_PORT='${{ secrets.BACKEND_PORT || vars.BACKEND_PORT || '5000' }}'
           FRONTEND_PORT='${{ secrets.FRONTEND_PORT || vars.FRONTEND_PORT || '3000' }}'
 
