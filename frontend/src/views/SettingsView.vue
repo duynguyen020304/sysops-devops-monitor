@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAlertsStore } from '@/stores/alerts'
-import type { AlertRule, CreateAlertRuleRequest, UserWithRoles, Role, RoleDetail, Permission, CreateRoleRequest, UpdateRoleRequest } from '@/types'
+import type { AlertRule, CreateAlertRuleRequest, UserWithRoles, Role, RoleDetail, Permission, CreateRoleRequest, UpdateRoleRequest, CreateUserRequest } from '@/types'
 import AlertRuleForm from '@/components/alerts/AlertRuleForm.vue'
 import EmptyState from '@/components/empty/EmptyState.vue'
 import api from '@/lib/api'

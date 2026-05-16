@@ -61,6 +61,12 @@ async function revokeToken(id: string) {
   } catch { /* ignore */ }
 }
 
+function copyPassword() {
+  navigator.clipboard.writeText(plainPassword.value)
+  copiedPw.value = true
+  setTimeout(() => { copiedPw.value = false }, 2000)
+}
+
 function copyText(text: string, type: 'curl' | 'page') {
   navigator.clipboard.writeText(text)
   if (type === 'curl') {
@@ -149,7 +155,7 @@ function statusIcon(status: string): string {
             {{ showPassword ? 'Hide' : 'View' }}
           </button>
           <button
-            @click="navigator.clipboard.writeText(plainPassword); copiedPw = true; setTimeout(() => copiedPw = false, 2000)"
+            @click="copyPassword"
             type="button"
             class="rounded bg-[var(--color-bg)] px-3 py-2 text-xs text-[var(--color-text-secondary)] hover:text-white"
           >
