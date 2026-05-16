@@ -376,6 +376,7 @@ jobs:
           cat > /root/Monitoring/backend/runtime-env.sh << EOF
           export ASPNETCORE_ENVIRONMENT='Production'
           export ASPNETCORE_URLS="http://localhost:${BACKEND_PORT}"
+          export CONNECTION_STRING='${{ secrets.POSTGRESQL_CONNECTION_STRING }}'
           export ConnectionStrings__DefaultConnection='${{ secrets.POSTGRESQL_CONNECTION_STRING }}'
           export JwtSettings__SecretKey='${{ secrets.JWT_SECRET_KEY }}'
           export JwtSettings__Issuer='${{ secrets.JWT_ISSUER }}'
