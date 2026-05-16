@@ -383,6 +383,7 @@ jobs:
           export JwtSettings__ExpirationMinutes='${{ secrets.JWT_EXPIRATION_MINUTES }}'
           export JwtSettings__RefreshTokenExpirationDays='${{ secrets.JWT_REFRESH_EXPIRATION_DAYS }}'
           export AllowedOrigins__0='${{ secrets.FRONTEND_URL }}'
+          export AllowedOrigins__1='https://monitor-system.shiphard.studio'
           EOF
           chmod 600 /root/Monitoring/backend/runtime-env.sh
 
