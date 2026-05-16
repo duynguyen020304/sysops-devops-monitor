@@ -113,9 +113,9 @@ public class AgentInstallController : ControllerBase
         var installToken = await ValidateInstallTokenAsync(t);
         if (installToken is null) return NotFound(new { message = "Invalid or expired install token." });
 
-        var agentDistPath = Path.Combine(_env.ContentRootPath, "..", "..", "agent", "dist");
-        var agentPackageJson = Path.Combine(_env.ContentRootPath, "..", "..", "agent", "package.json");
-        var agentLockFile = Path.Combine(_env.ContentRootPath, "..", "..", "agent", "pnpm-lock.yaml");
+        var agentDistPath = Path.Combine(_env.ContentRootPath, "..", "agent", "dist");
+        var agentPackageJson = Path.Combine(_env.ContentRootPath, "..", "agent", "package.json");
+        var agentLockFile = Path.Combine(_env.ContentRootPath, "..", "agent", "pnpm-lock.yaml");
         if (!Directory.Exists(agentDistPath)) return NotFound(new { message = "Agent files not found on server. Build the agent first." });
 
         var tempFile = Path.GetTempFileName();
@@ -139,7 +139,7 @@ public class AgentInstallController : ControllerBase
     }
 
     private async Task<AgentInstallToken?> ValidateInstallTokenAsync(string token) { var installToken = await _db.AgentInstallTokens.FirstOrDefaultAsync(x => x.Token == token); return installToken is null || installToken.RevokedAt is not null || installToken.ExpiresAt < DateTime.UtcNow ? null : installToken; }
-    private async Task<IActionResult> ServeInstallScript(string installToken) { var scriptPath = Path.Combine(_env.ContentRootPath, "..", "..", "agent", "install.sh"); if (!System.IO.File.Exists(scriptPath)) return NotFound(new { message = "install.sh template not found on server." }); var script = await System.IO.File.ReadAllTextAsync(scriptPath); var baseUrl = GetBaseUrl(); script = script.Replace("BACKEND_URL=\"\"", $"BACKEND_URL=\"{baseUrl}\""); script = script.Replace("INSTALL_TOKEN=\"\"", $"INSTALL_TOKEN=\"{installToken}\""); return File(Encoding.UTF8.GetBytes(script), "text/x-shellscript", "install-agent.sh"); }
+    private async Task<IActionResult> ServeInstallScript(string installToken) { var scriptPath = Path.Combine(_env.ContentRootPath, "..", "agent", "install.sh"); if (!System.IO.File.Exists(scriptPath)) return NotFound(new { message = "install.sh template not found on server." }); var script = await System.IO.File.ReadAllTextAsync(scriptPath); var baseUrl = GetBaseUrl(); script = script.Replace("BACKEND_URL=\"\"", $"BACKEND_URL=\"{baseUrl}\""); script = script.Replace("INSTALL_TOKEN=\"\"", $"INSTALL_TOKEN=\"{installToken}\""); return File(Encoding.UTF8.GetBytes(script), "text/x-shellscript", "install-agent.sh"); }
     private Guid GetUserId() { var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier); return claim is not null ? Guid.Parse(claim.Value) : Guid.Empty; }
     private string GetBaseUrl() => $"{Request.Scheme}://{Request.Host.Value}";
     private static string GenerateSecureToken() { var bytes = new byte[24]; RandomNumberGenerator.Fill(bytes); return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").Replace("=", ""); }

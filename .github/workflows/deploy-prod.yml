@@ -90,6 +90,7 @@ jobs:
             agent/dist
             agent/package.json
             agent/pnpm-lock.yaml
+            agent/install.sh
           retention-days: 1
 
   # ==========================================
@@ -460,6 +461,9 @@ jobs:
           mv /tmp/monitoring-agent-deploy/package.json .
           if [ -f /tmp/monitoring-agent-deploy/pnpm-lock.yaml ]; then
             mv /tmp/monitoring-agent-deploy/pnpm-lock.yaml .
+          fi
+          if [ -f /tmp/monitoring-agent-deploy/install.sh ]; then
+            mv /tmp/monitoring-agent-deploy/install.sh .
           fi
           rm -rf /tmp/monitoring-agent-deploy
 
