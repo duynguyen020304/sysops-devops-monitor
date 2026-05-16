@@ -38,6 +38,8 @@ jobs:
       # Build Vue.js Frontend
       # ------------------------------------------
       - name: Install & Build Frontend
+        env:
+          VITE_API_URL: ${{ secrets.BACKEND_URL }}
         run: |
           cd frontend
           pnpm install
