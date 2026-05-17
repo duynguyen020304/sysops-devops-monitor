@@ -389,11 +389,11 @@ jobs:
           chmod 600 /root/Monitoring/backend/runtime-env.sh
 
           # ==========================================
-          # 5. Stop PM2 Processes
+          # 5. Delete Old PM2 Processes First
           # ==========================================
-          echo "Stopping PM2 processes..."
-          "$PM2_BIN" stop monitoring-frontend 2>/dev/null || true
-          "$PM2_BIN" stop monitoring-api 2>/dev/null || true
+          echo "Deleting old PM2 processes before deploy..."
+          "$PM2_BIN" delete monitoring-frontend 2>/dev/null || true
+          "$PM2_BIN" delete monitoring-api 2>/dev/null || true
 
           # ==========================================
           # 6. Deploy Frontend (Static Files)
