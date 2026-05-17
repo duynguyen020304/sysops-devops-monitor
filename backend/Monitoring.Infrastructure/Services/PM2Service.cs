@@ -18,11 +18,14 @@ public class PM2Service : IPM2Service
 
     public async Task ProcessPM2DataAsync(Guid serverId, List<PM2ProcessDto> processes)
     {
-        var existingProcesses = await _db.PM2Processes
+        var existingProcessRows = await _db.PM2Processes
             .Where(p => p.ServerId == serverId)
+            .ToListAsync();
+
+        var existingProcesses = existingProcessRows
             .GroupBy(p => p.Name)
             .Select(g => g.OrderByDescending(p => p.UpdatedAt).ThenByDescending(p => p.CreatedAt).First())
-            .ToDictionaryAsync(p => p.Name);
+            .ToDictionary(p => p.Name);
 
         var now = DateTime.UtcNow;
 
@@ -107,12 +110,15 @@ public class PM2Service : IPM2Service
 
     public async Task<List<PM2Process>> GetProcessesByServerAsync(Guid serverId)
     {
-        return await _db.PM2Processes
+        var processes = await _db.PM2Processes
             .Where(p => p.ServerId == serverId)
+            .ToListAsync();
+
+        return processes
             .GroupBy(p => p.Name)
             .Select(g => g.OrderByDescending(p => p.UpdatedAt).ThenByDescending(p => p.CreatedAt).First())
             .OrderBy(p => p.Pm2Id)
-            .ToListAsync();
+            .ToList();
     }
 
     public async Task<PM2Process?> GetProcessAsync(Guid processId)

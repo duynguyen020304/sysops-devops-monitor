@@ -94,11 +94,14 @@ public class AgentController : ControllerBase
             return NotFound(new { message = "Server not found." });
 
         var now = DateTime.UtcNow;
-        var processIdsByName = await _db.PM2Processes
+        var processRows = await _db.PM2Processes
             .Where(p => p.ServerId == request.ServerId)
+            .ToListAsync();
+
+        var processIdsByName = processRows
             .GroupBy(p => p.Name)
             .Select(g => new { Name = g.Key, Id = g.OrderByDescending(p => p.UpdatedAt).First().Id })
-            .ToDictionaryAsync(p => p.Name, p => p.Id);
+            .ToDictionary(p => p.Name, p => p.Id);
 
         var candidates = new List<PM2Log>();
         var droppedNoProcess = 0;
