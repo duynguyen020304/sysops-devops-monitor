@@ -1,26 +1,28 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { pm2Api } from '@/lib/api'
-import type { PM2Process, PM2Log } from '@/types'
+import { pm2Api, systemdApi } from '@/lib/api'
+import type { PM2Process, PM2Log, SystemdService, SystemdLog } from '@/types'
 import ProcessStatusBadge from '@/components/common/ProcessStatusBadge.vue'
 
 const route = useRoute()
 const router = useRouter()
 const processId = route.params.processId as string
+const kind = (route.params.kind as string | undefined) === 'systemd' ? 'systemd' : 'pm2'
 
-const process = ref<PM2Process | null>(null)
-const stdoutLogs = ref<PM2Log[]>([])
-const errorLogs = ref<PM2Log[]>([])
+const pm2Process = ref<PM2Process | null>(null)
+const systemdService = ref<SystemdService | null>(null)
+const pm2Logs = ref<PM2Log[]>([])
+const systemdLogs = ref<SystemdLog[]>([])
 const loading = ref(true)
 const logsLoading = ref(false)
 const processError = ref('')
 const logsError = ref('')
-const activeTab = ref<'stdout' | 'stderr'>('stdout')
+const activeTab = ref<'stdout' | 'stderr' | 'journal'>('stdout')
 
 function normalizeStreamType(value: string): 'stdout' | 'stderr' {
   const v = value.toLowerCase()
-  if (v === 'stderr' || v === 'stderr' || v === 'err') return 'stderr'
+  if (v === 'stderr' || v === 'err') return 'stderr'
   return 'stdout'
 }
 
@@ -35,11 +37,15 @@ async function loadLogs(): Promise<void> {
   logsLoading.value = true
   logsError.value = ''
   try {
-    const logsRes = await pm2Api.getLogs(processId, 200)
-    stdoutLogs.value = logsRes.data.filter((l) => normalizeStreamType(l.streamType) === 'stdout')
-    errorLogs.value = logsRes.data.filter((l) => normalizeStreamType(l.streamType) === 'stderr')
+    if (kind === 'systemd') {
+      const res = await systemdApi.getLogs(processId, { limit: 200 })
+      systemdLogs.value = res.data
+    } else {
+      const res = await pm2Api.getLogs(processId, 200)
+      pm2Logs.value = res.data
+    }
   } catch (error) {
-    logsError.value = errorText(error, 'Failed to load PM2 logs.')
+    logsError.value = errorText(error, `Failed to load ${kind} logs.`)
   } finally {
     logsLoading.value = false
   }
@@ -49,59 +55,57 @@ onMounted(async () => {
   loading.value = true
   processError.value = ''
   try {
-    const processRes = await pm2Api.getById(processId)
-    process.value = processRes.data
+    if (kind === 'systemd') {
+      activeTab.value = 'journal'
+      systemdService.value = (await systemdApi.getById(processId)).data
+    } else {
+      pm2Process.value = (await pm2Api.getById(processId)).data
+    }
   } catch (error) {
-    processError.value = errorText(error, 'Failed to load PM2 process.')
+    processError.value = errorText(error, `Failed to load ${kind} process.`)
   } finally {
     loading.value = false
   }
 
-  if (process.value) {
-    await loadLogs()
-  }
+  if (pm2Process.value || systemdService.value) await loadLogs()
 })
 
-function formatUptime(seconds: number): string {
+function formatUptime(seconds?: number | null): string {
+  if (seconds == null) return '-'
   if (seconds < 60) return `${seconds}s`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
   return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
 }
 
-function formatMemory(bytes: number): string {
+function formatMemory(bytes?: number | null): string {
+  if (!bytes) return '-'
   if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(1)} GB`
   if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(0)} MB`
   return `${(bytes / 1024).toFixed(0)} KB`
 }
 
 function formatTime(ts: string): string {
-  try {
-    return new Date(ts).toLocaleString()
-  } catch {
-    return ts
-  }
+  try { return new Date(ts).toLocaleString() } catch { return ts }
 }
 
 function levelColor(level: string): string {
   switch (level.toLowerCase()) {
-    case 'error':
-      return 'bg-red-500/20 text-red-400'
-    case 'warning':
-    case 'warn':
-      return 'bg-yellow-500/20 text-yellow-400'
-    case 'info':
-      return 'bg-green-500/20 text-green-400'
-    default:
-      return 'bg-gray-500/20 text-gray-400'
+    case 'error': return 'bg-red-500/20 text-red-400'
+    case 'warning': case 'warn': return 'bg-yellow-500/20 text-yellow-400'
+    case 'info': return 'bg-green-500/20 text-green-400'
+    default: return 'bg-gray-500/20 text-gray-400'
   }
 }
 
-const currentLogs = computed(() =>
-  activeTab.value === 'stdout' ? stdoutLogs.value : errorLogs.value
-)
+const stdoutLogs = computed(() => pm2Logs.value.filter((l) => normalizeStreamType(l.streamType) === 'stdout'))
+const errorLogs = computed(() => pm2Logs.value.filter((l) => normalizeStreamType(l.streamType) === 'stderr'))
+const currentLogs = computed(() => {
+  if (activeTab.value === 'journal') return systemdLogs.value
+  return activeTab.value === 'stdout' ? stdoutLogs.value : errorLogs.value
+})
+const title = computed(() => pm2Process.value?.name ?? systemdService.value?.name ?? '')
 </script>
-
 <template>
   <div>
     <!-- Loading -->
@@ -109,7 +113,7 @@ const currentLogs = computed(() =>
       <div class="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
     </div>
 
-    <template v-else-if="process">
+    <template v-else-if="pm2Process || systemdService">
       <!-- Header -->
       <div class="mb-6">
         <div class="flex items-center gap-3">
@@ -121,37 +125,42 @@ const currentLogs = computed(() =>
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h2 class="text-xl font-bold text-[var(--color-text)]">{{ process.name }}</h2>
-          <ProcessStatusBadge :status="process.status" />
+          <h2 class="text-xl font-bold text-[var(--color-text)]">{{ title }}</h2>
+          <ProcessStatusBadge v-if="pm2Process" :status="pm2Process.status" />
+          <span v-else-if="systemdService" class="rounded px-2 py-1 text-xs font-semibold" :class="systemdService.activeState === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'">{{ systemdService.activeState }}</span>
         </div>
-        <p class="mt-1 ml-10 text-sm text-[var(--color-text-secondary)]">
-          PID {{ process.pid }} &middot; PM2 ID {{ process.pm2Id }} &middot; {{ process.executionMode }} mode &middot; Node {{ process.nodeVersion }}
+        <p v-if="pm2Process" class="mt-1 ml-10 text-sm text-[var(--color-text-secondary)]">
+          PID {{ pm2Process.pid }} &middot; PM2 ID {{ pm2Process.pm2Id }} &middot; {{ pm2Process.executionMode }} mode &middot; Node {{ pm2Process.nodeVersion }}
+        </p>
+        <p v-else-if="systemdService" class="mt-1 ml-10 text-sm text-[var(--color-text-secondary)]">
+          PID {{ systemdService.mainPid || '-' }} &middot; {{ systemdService.description || systemdService.displayName || 'systemd service' }} &middot; {{ systemdService.subState }}
         </p>
       </div>
 
       <!-- Stats cards -->
       <div class="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
-          <p class="text-xs font-medium text-[var(--color-text-secondary)]">Uptime</p>
-          <p class="mt-1 text-xl font-bold text-[var(--color-text)]">{{ formatUptime(process.uptimeSeconds) }}</p>
+          <p class="text-xs font-medium text-[var(--color-text-secondary)]">{{ pm2Process ? 'Uptime' : 'Load State' }}</p>
+          <p class="mt-1 text-xl font-bold text-[var(--color-text)]">{{ pm2Process ? formatUptime(pm2Process.uptimeSeconds) : systemdService?.loadState }}</p>
         </div>
         <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
           <p class="text-xs font-medium text-[var(--color-text-secondary)]">Restarts</p>
-          <p class="mt-1 text-xl font-bold text-[var(--color-text)]">{{ process.restartCount }}</p>
+          <p class="mt-1 text-xl font-bold text-[var(--color-text)]">{{ pm2Process?.restartCount ?? systemdService?.restartCount ?? 0 }}</p>
         </div>
         <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
-          <p class="text-xs font-medium text-[var(--color-text-secondary)]">CPU Usage</p>
-          <p class="mt-1 text-xl font-bold text-[var(--color-text)]">{{ process.cpuUsage.toFixed(1) }}%</p>
+          <p class="text-xs font-medium text-[var(--color-text-secondary)]">{{ pm2Process ? 'CPU Usage' : 'Sub State' }}</p>
+          <p class="mt-1 text-xl font-bold text-[var(--color-text)]">{{ pm2Process ? `${pm2Process.cpuUsage.toFixed(1)}%` : systemdService?.subState }}</p>
         </div>
         <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
           <p class="text-xs font-medium text-[var(--color-text-secondary)]">Memory</p>
-          <p class="mt-1 text-xl font-bold text-[var(--color-text)]">{{ formatMemory(process.memoryUsage) }}</p>
+          <p class="mt-1 text-xl font-bold text-[var(--color-text)]">{{ formatMemory(pm2Process?.memoryUsage ?? systemdService?.memoryCurrent) }}</p>
         </div>
       </div>
 
       <!-- Logs tabs -->
       <div class="mb-4 flex gap-1 rounded-lg bg-[var(--color-bg-tertiary)] p-1">
         <button
+          v-if="pm2Process"
           @click="activeTab = 'stdout'"
           :class="[
             'rounded-md px-4 py-2 text-sm font-medium transition-colors',
@@ -163,6 +172,7 @@ const currentLogs = computed(() =>
           Stdout ({{ stdoutLogs.length }})
         </button>
         <button
+          v-if="pm2Process"
           @click="activeTab = 'stderr'"
           :class="[
             'rounded-md px-4 py-2 text-sm font-medium transition-colors',
@@ -172,6 +182,18 @@ const currentLogs = computed(() =>
           ]"
         >
           Stderr ({{ errorLogs.length }})
+        </button>
+        <button
+          v-if="systemdService"
+          @click="activeTab = 'journal'"
+          :class="[
+            'rounded-md px-4 py-2 text-sm font-medium transition-colors',
+            activeTab === 'journal'
+              ? 'bg-[var(--color-bg-secondary)] text-[var(--color-text)] shadow-sm'
+              : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]',
+          ]"
+        >
+          Journal ({{ systemdLogs.length }})
         </button>
       </div>
 
@@ -197,7 +219,7 @@ const currentLogs = computed(() =>
             v-else-if="currentLogs.length === 0"
             class="flex h-full items-center justify-center text-gray-500"
           >
-            No {{ activeTab === 'stdout' ? 'stdout' : 'error' }} log entries found
+            No {{ activeTab === 'journal' ? 'journal' : activeTab === 'stdout' ? 'stdout' : 'error' }} log entries found
           </div>
           <div
             v-for="log in currentLogs"
@@ -220,7 +242,7 @@ const currentLogs = computed(() =>
     <div v-else class="flex flex-col items-center justify-center py-20">
       <p class="text-[var(--color-text-secondary)]">{{ processError || 'Process not found.' }}</p>
       <button @click="router.push('/pm2')" class="mt-3 text-sm text-blue-400 hover:underline">
-        Back to PM2 processes
+        Back to processes
       </button>
     </div>
   </div>

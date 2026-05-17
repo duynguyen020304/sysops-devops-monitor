@@ -18,6 +18,9 @@ public class MonitoringDbContext : DbContext
     public DbSet<WorkflowLog> WorkflowLogs => Set<WorkflowLog>();
     public DbSet<Server> Servers => Set<Server>();
     public DbSet<AgentInstallToken> AgentInstallTokens => Set<AgentInstallToken>();
+    public DbSet<AgentUpdateRelease> AgentUpdateReleases => Set<AgentUpdateRelease>();
+    public DbSet<AgentUpdateAssignment> AgentUpdateAssignments => Set<AgentUpdateAssignment>();
+    public DbSet<AgentUpdateEvent> AgentUpdateEvents => Set<AgentUpdateEvent>();
     public DbSet<PM2Process> PM2Processes => Set<PM2Process>();
     public DbSet<PM2Log> PM2Logs => Set<PM2Log>();
     public DbSet<SystemdService> SystemdServices => Set<SystemdService>();
@@ -149,6 +152,9 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.IpAddress).IsRequired().HasMaxLength(45);
             e.Property(x => x.OperatingSystem).IsRequired().HasMaxLength(128);
             e.Property(x => x.AgentVersion).IsRequired().HasMaxLength(32);
+            e.Property(x => x.AgentBuildId).HasMaxLength(128);
+            e.Property(x => x.AgentCapabilitiesJson);
+            e.Property(x => x.AgentUpdateStatus).HasMaxLength(64);
             e.Property(x => x.ServerToken).HasMaxLength(128);
             e.Property(x => x.SshUsername).HasMaxLength(128);
             e.Property(x => x.SshPort).HasDefaultValue(22);
@@ -165,6 +171,46 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.ServerName).IsRequired().HasMaxLength(256);
             e.HasIndex(x => x.Token).IsUnique();
             e.HasIndex(x => x.WorkspaceId);
+        });
+
+        // AgentUpdateRelease
+        modelBuilder.Entity<AgentUpdateRelease>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Version).IsRequired().HasMaxLength(32);
+            e.Property(x => x.BuildId).IsRequired().HasMaxLength(128);
+            e.Property(x => x.Channel).IsRequired().HasMaxLength(64);
+            e.Property(x => x.GitSha).HasMaxLength(64);
+            e.Property(x => x.ManifestJson).IsRequired();
+            e.Property(x => x.ManifestSignature).IsRequired();
+            e.Property(x => x.PublicKeyId).IsRequired().HasMaxLength(128);
+            e.Property(x => x.ArtifactPath).IsRequired().HasMaxLength(512);
+            e.Property(x => x.ArtifactSha256).HasMaxLength(128);
+            e.HasIndex(x => new { x.WorkspaceId, x.Channel, x.IsActive });
+        });
+
+        // AgentUpdateAssignment
+        modelBuilder.Entity<AgentUpdateAssignment>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Status).IsRequired().HasMaxLength(64);
+            e.Property(x => x.FromVersion).HasMaxLength(32);
+            e.Property(x => x.FromBuildId).HasMaxLength(128);
+            e.Property(x => x.ErrorMessage).HasMaxLength(1024);
+            e.HasIndex(x => new { x.ServerId, x.Status });
+            e.HasOne(x => x.Server).WithMany().HasForeignKey(x => x.ServerId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Release).WithMany().HasForeignKey(x => x.ReleaseId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // AgentUpdateEvent
+        modelBuilder.Entity<AgentUpdateEvent>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.EventType).IsRequired().HasMaxLength(64);
+            e.Property(x => x.Message).HasMaxLength(1024);
+            e.HasIndex(x => new { x.ServerId, x.Timestamp });
+            e.HasIndex(x => x.AssignmentId);
+            e.HasOne(x => x.Assignment).WithMany().HasForeignKey(x => x.AssignmentId).OnDelete(DeleteBehavior.SetNull);
         });
 
         // PM2Process

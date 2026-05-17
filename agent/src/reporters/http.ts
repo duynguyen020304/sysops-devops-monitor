@@ -163,9 +163,9 @@ export class HttpReporter {
       serverId,
       timestamp: new Date().toISOString(),
       agentVersion: process.env.AGENT_VERSION || '1.0.0',
-      agentBuildId: process.env.AGENT_BUILD_ID || 'dev',
-      agentCapabilities: { updaterProtocol: 1 },
-      agentUpdateState: config.updateEnabled ? 'Idle' : 'Disabled',
+      buildId: process.env.AGENT_BUILD_ID || 'dev',
+      capabilities: { updaterProtocol: 1 },
+      updateState: config.updateEnabled ? 'Idle' : 'Disabled',
     })
 
     if (!success) {
@@ -175,9 +175,9 @@ export class HttpReporter {
           serverId,
           timestamp: new Date().toISOString(),
           agentVersion: process.env.AGENT_VERSION || '1.0.0',
-          agentBuildId: process.env.AGENT_BUILD_ID || 'dev',
-          agentCapabilities: { updaterProtocol: 1 },
-          agentUpdateState: config.updateEnabled ? 'Idle' : 'Disabled',
+          buildId: process.env.AGENT_BUILD_ID || 'dev',
+          capabilities: { updaterProtocol: 1 },
+          updateState: config.updateEnabled ? 'Idle' : 'Disabled',
         },
         timestamp: new Date().toISOString(),
       })

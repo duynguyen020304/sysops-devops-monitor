@@ -25,6 +25,8 @@ import type {
   DeployAgentResponse,
   AgentInstallToken,
   AgentInstallTokenList,
+  AgentUpdateRelease,
+  AgentUpdateAssignment,
 } from '@/types'
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
@@ -106,6 +108,15 @@ export const serversApi = {
   getHealth: (id: string) => api.get<ServerHealth>(`/servers/${id}/health`),
   deployAgent: (id: string) =>
     api.post<DeployAgentResponse>(`/servers/${id}/deploy-agent`),
+}
+
+export const agentUpdateApi = {
+  listReleases: () => api.get<AgentUpdateRelease[]>('/agent/update/releases'),
+  createCurrentRelease: () => api.post<AgentUpdateRelease>('/agent/update/releases/current'),
+  assign: (serverId: string, releaseId: string) =>
+    api.post<AgentUpdateAssignment>(`/agent/update/servers/${serverId}/assign`, { releaseId }),
+  listAssignments: (serverId: string) =>
+    api.get<AgentUpdateAssignment[]>(`/agent/update/servers/${serverId}/assignments`),
 }
 
 export const pm2Api = {

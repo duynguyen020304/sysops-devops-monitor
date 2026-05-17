@@ -39,12 +39,9 @@ export function verifyManifestSignature(
   publicKeyPem: string,
 ): boolean {
   try {
-    return verify(
-      null,
-      Buffer.from(canonicalizeManifest(manifest)),
-      publicKeyPem,
-      Buffer.from(signatureBase64, 'base64'),
-    )
+    const data = Buffer.from(canonicalizeManifest(manifest))
+    const signature = Buffer.from(signatureBase64, 'base64')
+    return verify(null, data, publicKeyPem, signature) || verify('sha256', data, publicKeyPem, signature)
   } catch {
     return false
   }

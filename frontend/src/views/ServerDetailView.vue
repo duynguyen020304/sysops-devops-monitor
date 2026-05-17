@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { serversApi, pm2Api } from '@/lib/api'
-import type { DeployAgentResponse, Server, ServerHealth, ServerMetric, PM2Process } from '@/types'
+import { serversApi, pm2Api, agentUpdateApi } from '@/lib/api'
+import type { DeployAgentResponse, Server, ServerHealth, ServerMetric, PM2Process, AgentUpdateRelease, AgentUpdateAssignment } from '@/types'
 import MetricChart from '@/components/charts/MetricChart.vue'
 import ProcessStatusBadge from '@/components/common/ProcessStatusBadge.vue'
 
@@ -21,17 +21,26 @@ const timeRange = ref('1h')
 const deploying = ref(false)
 const deployResult = ref<DeployAgentResponse | null>(null)
 
+const releases = ref<AgentUpdateRelease[]>([])
+const assignments = ref<AgentUpdateAssignment[]>([])
+const updating = ref(false)
+const updateError = ref('')
+
 onMounted(async () => {
   loading.value = true
   try {
-    const [serverRes, healthRes, processesRes] = await Promise.all([
+    const [serverRes, healthRes, processesRes, releasesRes, assignmentsRes] = await Promise.all([
       serversApi.getById(serverId),
       serversApi.getHealth(serverId),
       pm2Api.listByServer(serverId),
+      agentUpdateApi.listReleases().catch(() => ({ data: [] as AgentUpdateRelease[] })),
+      agentUpdateApi.listAssignments(serverId).catch(() => ({ data: [] as AgentUpdateAssignment[] })),
     ])
     server.value = serverRes.data
     health.value = healthRes.data
     processes.value = processesRes.data
+    releases.value = releasesRes.data
+    assignments.value = assignmentsRes.data
     await onTimeRangeChange('1h')
   } catch {
     // handled by UI
@@ -88,6 +97,39 @@ async function deployAgent() {
     deployResult.value = err?.response?.data ?? { success: false, output: '', error: 'Deploy failed', deployedAt: new Date().toISOString() }
   } finally {
     deploying.value = false
+  }
+}
+
+const latestRelease = computed(() => releases.value[0] ?? null)
+const latestAssignment = computed(() => assignments.value[0] ?? null)
+const updateAvailable = computed(() => !!latestRelease.value && (!!server.value?.agentBuildId ? server.value.agentBuildId !== latestRelease.value.buildId : server.value?.agentVersion !== latestRelease.value.version))
+
+async function createRelease() {
+  updating.value = true
+  updateError.value = ''
+  try {
+    const { data } = await agentUpdateApi.createCurrentRelease()
+    releases.value = [data, ...releases.value.filter((r) => r.id !== data.id)]
+  } catch (err: any) {
+    updateError.value = err?.response?.data?.message ?? 'Failed to create release.'
+  } finally {
+    updating.value = false
+  }
+}
+
+async function updateAgent() {
+  if (!latestRelease.value) await createRelease()
+  if (!latestRelease.value) return
+  updating.value = true
+  updateError.value = ''
+  try {
+    const { data } = await agentUpdateApi.assign(serverId, latestRelease.value.id)
+    assignments.value = [data, ...assignments.value]
+    if (server.value) server.value.agentUpdateStatus = data.status
+  } catch (err: any) {
+    updateError.value = err?.response?.data?.message ?? 'Failed to assign update.'
+  } finally {
+    updating.value = false
   }
 }
 
@@ -201,6 +243,29 @@ function formatMemory(bytes: number): string {
           </button>
           <span>Last heartbeat: <span class="font-medium text-[var(--color-text)]">{{ formatTimeAgo(server.lastHeartbeatAt) }}</span></span>
           <span v-if="health">Alerts: <span class="font-medium text-red-400">{{ health.alertCount }}</span></span>
+        </div>
+      </div>
+
+      <div class="mb-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 class="text-sm font-semibold text-[var(--color-text)]">Agent Updates</h3>
+            <p class="mt-1 text-xs text-[var(--color-text-secondary)]">
+              Current: v{{ server.agentVersion }} <span v-if="server.agentBuildId">({{ server.agentBuildId.slice(0, 12) }})</span>
+              <span v-if="latestRelease"> · Latest: v{{ latestRelease.version }} ({{ latestRelease.buildId.slice(0, 12) }})</span>
+            </p>
+            <p v-if="server.agentUpdateStatus" class="mt-1 text-xs text-blue-400">Status: {{ server.agentUpdateStatus }}</p>
+            <p v-if="latestAssignment" class="mt-1 text-xs text-[var(--color-text-secondary)]">Last assignment: {{ latestAssignment.status }} · {{ new Date(latestAssignment.updatedAt).toLocaleString() }}</p>
+            <p v-if="updateError" class="mt-2 text-xs text-red-400">{{ updateError }}</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button class="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text)] hover:bg-[var(--color-bg-tertiary)] disabled:opacity-60" :disabled="updating" @click="createRelease">
+              Build Release
+            </button>
+            <button class="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-500 disabled:opacity-60" :disabled="updating || !latestRelease" @click="updateAgent">
+              {{ updating ? 'Scheduling...' : updateAvailable ? 'Update Agent' : 'Reinstall Latest' }}
+            </button>
+          </div>
         </div>
       </div>
 

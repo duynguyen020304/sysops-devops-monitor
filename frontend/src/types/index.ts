@@ -145,6 +145,8 @@ export interface Server {
   status: string // Healthy, Warning, Critical, Unknown
   lastHeartbeatAt: string | null
   createdAt: string
+  agentBuildId?: string | null
+  agentUpdateStatus?: string | null
 }
 
 export interface ServerHealth {
@@ -202,6 +204,33 @@ export interface SystemdLog {
   message: string
   cursor: string | null
   bootId: string | null
+}
+
+export interface AgentUpdateRelease {
+  id: string
+  version: string
+  buildId: string
+  channel: string
+  gitSha: string | null
+  isActive: boolean
+  artifactSha256: string
+  artifactSize: number
+  createdAt: string
+}
+
+export interface AgentUpdateAssignment {
+  id: string
+  serverId: string
+  releaseId: string
+  version: string
+  buildId: string
+  status: string
+  fromVersion: string | null
+  fromBuildId: string | null
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+  completedAt: string | null
 }
 
 export interface ServerMetric {

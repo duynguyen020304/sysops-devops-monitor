@@ -38,15 +38,9 @@ const navItems = [
     permission: 'deploy_agents' as const,
   },
   {
-    name: 'PM2 Processes',
+    name: 'Processes',
     path: '/pm2',
     icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z',
-    permission: 'view_pm2_logs' as const,
-  },
-  {
-    name: 'Systemd Services',
-    path: '/systemd',
-    icon: 'M8 9l3 3-3 3m5 0h3M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z',
     permission: 'view_pm2_logs' as const,
   },
   {

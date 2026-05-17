@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Entities;
 using Monitoring.Core.Enums;
@@ -40,6 +41,16 @@ public class AgentController : ControllerBase
         try
         {
             await _serverService.ProcessHeartbeatAsync(request.ServerId);
+            var server = await _db.Servers.FindAsync(request.ServerId);
+            if (server is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(request.AgentVersion)) server.AgentVersion = request.AgentVersion;
+                if (!string.IsNullOrWhiteSpace(request.BuildId)) server.AgentBuildId = request.BuildId;
+                if (request.Capabilities is not null) server.AgentCapabilitiesJson = JsonSerializer.Serialize(request.Capabilities);
+                if (!string.IsNullOrWhiteSpace(request.UpdateState)) server.AgentUpdateStatus = request.UpdateState;
+                server.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
             return Ok(new { message = "Heartbeat received." });
         }
         catch (InvalidOperationException ex)

@@ -53,26 +53,14 @@ const router = createRouter({
         },
         {
           path: 'pm2',
-          name: 'pm2-processes',
-          component: () => import('@/views/PM2ProcessesView.vue'),
+          name: 'processes',
+          component: () => import('@/views/ProcessesView.vue'),
           meta: { requiredPermission: 'view_pm2_logs' },
         },
         {
-          path: 'pm2/:processId',
-          name: 'pm2-process-detail',
-          component: () => import('@/views/PM2ProcessDetailView.vue'),
-          meta: { requiredPermission: 'view_pm2_logs' },
-        },
-        {
-          path: 'systemd',
-          name: 'systemd-services',
-          component: () => import('@/views/SystemdServicesView.vue'),
-          meta: { requiredPermission: 'view_pm2_logs' },
-        },
-        {
-          path: 'systemd/:serviceId',
-          name: 'systemd-service-detail',
-          component: () => import('@/views/SystemdServiceDetailView.vue'),
+          path: 'pm2/:kind/:processId',
+          name: 'process-detail',
+          component: () => import('@/views/ProcessDetailView.vue'),
           meta: { requiredPermission: 'view_pm2_logs' },
         },
         {
