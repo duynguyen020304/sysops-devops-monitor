@@ -479,11 +479,11 @@ jobs:
           "$PM2_BIN" delete monitoring-api 2>/dev/null || true
           "$PM2_BIN" delete monitoring-agent 2>/dev/null || true
 
-          # Serve frontend static via Node.js http-server
-          if ! command -v http-server &> /dev/null; then
-            /root/.nvm/versions/node/v24.14.0/bin/pnpm install -g http-server
+          # Serve frontend static via serve (SPA mode - rewrites all 404s to index.html)
+          if ! command -v serve &> /dev/null; then
+            /root/.nvm/versions/node/v24.14.0/bin/pnpm install -g serve
           fi
-          "$PM2_BIN" start /root/.local/share/pnpm/bin/http-server --name "monitoring-frontend" --interpreter bash -- /root/Monitoring/frontend/dist -p "$FRONTEND_PORT" -c-1 --spa
+          "$PM2_BIN" start /root/.local/share/pnpm/bin/serve --name "monitoring-frontend" --interpreter bash -- -s /root/Monitoring/frontend/dist -l "$FRONTEND_PORT"
 
           # Start Backend
           "$PM2_BIN" start /root/Monitoring/backend/start.sh --name "monitoring-api"
