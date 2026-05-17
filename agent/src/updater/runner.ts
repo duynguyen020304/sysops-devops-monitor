@@ -24,6 +24,12 @@ export class AgentUpdater {
       process.kill(process.pid, 'SIGTERM')
     } catch (error) {
       console.error('Agent update check failed:', error)
+      const message = error instanceof Error ? error.message : String(error)
+      try {
+        await this.client.reportEvent({ eventType: 'Failed', message })
+      } catch {
+        // best-effort only
+      }
     } finally {
       this.running = false
     }

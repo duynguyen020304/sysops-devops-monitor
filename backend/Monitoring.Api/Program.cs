@@ -9,6 +9,7 @@ using Monitoring.Infrastructure.BackgroundServices;
 using Monitoring.Infrastructure.Data;
 using Monitoring.Infrastructure.Services;
 using Monitoring.Api.Middleware;
+using Monitoring.Api.Services;
 
 // Load .env file (searches up from current directory)
 DotNetEnv.Env.Load(Path.Combine(Directory.GetCurrentDirectory(), "..", ".env"));
@@ -112,6 +113,8 @@ builder.Services.AddHostedService<GitHubSyncService>();
 builder.Services.AddHostedService<MetricAggregationService>();
 builder.Services.AddHostedService<LogRetentionService>();
 builder.Services.AddHostedService<AlertEvaluationService>();
+builder.Services.AddHostedService<AgentReleasePublisherService>();
+builder.Services.AddHostedService<AgentUpdateSchedulerService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

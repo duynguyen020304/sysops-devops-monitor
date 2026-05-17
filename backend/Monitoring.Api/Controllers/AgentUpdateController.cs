@@ -6,6 +6,7 @@ using Monitoring.Api.Filters;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Entities;
 using Monitoring.Infrastructure.Data;
+using Monitoring.Api.Services;
 
 namespace Monitoring.Api.Controllers;
 
@@ -65,6 +66,11 @@ public class AgentUpdateController : ControllerBase
         AgentUpdateAssignment? assignment = null;
         if (request.AssignmentId is not null)
             assignment = await _db.AgentUpdateAssignments.FirstOrDefaultAsync(a => a.Id == request.AssignmentId && a.ServerId == server.Id);
+        if (assignment is null && request.EventType.Equals("Failed", StringComparison.OrdinalIgnoreCase))
+            assignment = await _db.AgentUpdateAssignments
+                .Where(a => a.ServerId == server.Id && (a.Status == "Pending" || a.Status == "Offered" || a.Status == "Downloading" || a.Status == "Verified" || a.Status == "Restarting"))
+                .OrderBy(a => a.CreatedAt)
+                .FirstOrDefaultAsync();
 
         var now = request.Timestamp ?? DateTimeOffset.UtcNow;
         _db.AgentUpdateEvents.Add(new AgentUpdateEvent
@@ -166,74 +172,14 @@ public class AgentUpdateController : ControllerBase
         var buildId = _config["AGENT_BUILD_ID"] ?? Environment.GetEnvironmentVariable("GITHUB_SHA") ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
         var releaseDir = Path.Combine(_env.ContentRootPath, "agent-releases"); Directory.CreateDirectory(releaseDir);
         var artifactPath = Path.Combine(releaseDir, $"monitoring-agent-{version}-{buildId}.tar.gz");
-        if (!System.IO.File.Exists(artifactPath)) await CreateTarAsync(agentDistPath, packageJsonPath, lockPath, artifactPath);
+        if (!System.IO.File.Exists(artifactPath)) await AgentReleasePackager.CreateTarAsync(agentDistPath, packageJsonPath, lockPath, artifactPath);
         var artifactBytes = await System.IO.File.ReadAllBytesAsync(artifactPath);
         var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(artifactBytes)).ToLowerInvariant();
         var publicKeyId = _config["AgentUpdates:PublicKeyId"] ?? "dev";
         var manifest = new { schemaVersion = 1, version, buildId, gitSha = _config["GITHUB_SHA"] ?? Environment.GetEnvironmentVariable("GITHUB_SHA"), createdAt = DateTimeOffset.UtcNow.ToString("O"), expiresAt = DateTimeOffset.UtcNow.AddDays(14).ToString("O"), channel = "stable", artifactSha256 = sha, artifactSize = artifactBytes.LongLength };
-        var manifestJson = CanonicalizeJson(JsonSerializer.Serialize(manifest, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
-        var signature = _config["AgentUpdates:PrivateKeyPem"] is { Length: > 0 } privateKey ? SignManifest(manifestJson, privateKey) : "UNSIGNED_DEV";
+        var manifestJson = AgentUpdateManifestTools.CanonicalizeJson(JsonSerializer.Serialize(manifest, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+        var signature = _config["AgentUpdates:PrivateKeyPem"] is { Length: > 0 } privateKey ? AgentUpdateManifestTools.SignManifest(manifestJson, privateKey) : "UNSIGNED_DEV";
         return new AgentUpdateRelease { Id = Guid.NewGuid(), WorkspaceId = workspaceId, Version = version, BuildId = buildId, ManifestJson = manifestJson, ManifestSignature = signature, PublicKeyId = publicKeyId, ArtifactPath = artifactPath, ArtifactSha256 = sha, ArtifactSize = artifactBytes.LongLength, IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
-    }
-
-    private static async Task CreateTarAsync(string distPath, string packageJsonPath, string lockPath, string artifactPath)
-    {
-        var stagingDir = Path.Combine(Path.GetTempPath(), $"agent-release-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(stagingDir);
-        CopyDirectory(distPath, Path.Combine(stagingDir, "dist"));
-        System.IO.File.Copy(packageJsonPath, Path.Combine(stagingDir, "package.json"), true);
-        if (System.IO.File.Exists(lockPath)) System.IO.File.Copy(lockPath, Path.Combine(stagingDir, "pnpm-lock.yaml"), true);
-        var psi = new System.Diagnostics.ProcessStartInfo { FileName = "tar", Arguments = $"-czf \"{artifactPath}\" -C \"{stagingDir}\" .", UseShellExecute = false, RedirectStandardError = true };
-        var proc = System.Diagnostics.Process.Start(psi)!; await proc.WaitForExitAsync(); var err = await proc.StandardError.ReadToEndAsync(); Directory.Delete(stagingDir, true);
-        if (proc.ExitCode != 0) throw new InvalidOperationException("Failed to package agent artifact: " + err);
-    }
-
-    private static void CopyDirectory(string sourceDir, string destDir)
-    {
-        Directory.CreateDirectory(destDir);
-        foreach (var file in Directory.GetFiles(sourceDir)) System.IO.File.Copy(file, Path.Combine(destDir, Path.GetFileName(file)), true);
-        foreach (var dir in Directory.GetDirectories(sourceDir)) CopyDirectory(dir, Path.Combine(destDir, Path.GetFileName(dir)));
-    }
-
-    private static string CanonicalizeJson(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream)) WriteCanonical(doc.RootElement, writer);
-        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
-    }
-
-    private static void WriteCanonical(JsonElement element, Utf8JsonWriter writer)
-    {
-        switch (element.ValueKind)
-        {
-            case JsonValueKind.Object:
-                writer.WriteStartObject();
-                foreach (var prop in element.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal))
-                {
-                    writer.WritePropertyName(prop.Name);
-                    WriteCanonical(prop.Value, writer);
-                }
-                writer.WriteEndObject();
-                break;
-            case JsonValueKind.Array:
-                writer.WriteStartArray();
-                foreach (var item in element.EnumerateArray()) WriteCanonical(item, writer);
-                writer.WriteEndArray();
-                break;
-            case JsonValueKind.String: writer.WriteStringValue(element.GetString()); break;
-            case JsonValueKind.Number: writer.WriteRawValue(element.GetRawText()); break;
-            case JsonValueKind.True: writer.WriteBooleanValue(true); break;
-            case JsonValueKind.False: writer.WriteBooleanValue(false); break;
-            default: writer.WriteNullValue(); break;
-        }
-    }
-
-    private static string SignManifest(string manifestJson, string privateKeyPem)
-    {
-        using var key = System.Security.Cryptography.ECDsa.Create();
-        key.ImportFromPem(privateKeyPem);
-        return Convert.ToBase64String(key.SignData(System.Text.Encoding.UTF8.GetBytes(manifestJson), System.Security.Cryptography.HashAlgorithmName.SHA256));
     }
 
     private string GetBaseUrl()

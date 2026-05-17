@@ -21,6 +21,8 @@ INSTALL_TOKEN=""
 INSTALL_DIR="/opt/monitoring-agent"
 PM2_NAME="monitoring-agent"
 NODE_MAJOR=20
+ENABLE_UPDATES=true
+UPDATE_INTERVAL_MS=300000
 
 # --- Colors ---
 RED='\033[0;31m'
@@ -41,6 +43,8 @@ while [[ $# -gt 0 ]]; do
         --api-url) BACKEND_URL="$2"; shift 2 ;;
         --token) INSTALL_TOKEN="$2"; shift 2 ;;
         --dir) INSTALL_DIR="$2"; shift 2 ;;
+        --no-auto-update) ENABLE_UPDATES=false; shift ;;
+        --update-interval-ms) UPDATE_INTERVAL_MS="$2"; shift 2 ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -48,6 +52,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --api-url URL     Backend API URL"
             echo "  --token TOKEN     Install token"
             echo "  --dir DIR         Install directory (default: /opt/monitoring-agent)"
+            echo "  --no-auto-update Disable signed self-updates"
+            echo "  --update-interval-ms MS  Update check interval (default: 300000)"
             echo "  --dry-run         Show commands without executing"
             echo "  --uninstall       Remove agent"
             echo "  -h, --help        Show this help"
@@ -239,10 +245,20 @@ if ! $DRY_RUN; then
 
     ok "Downloaded agent files"
 
-    # Extract
-    mkdir -p "$INSTALL_DIR"
-    tar -xzf "$TARBALL" -C "$INSTALL_DIR"
-    ok "Extracted to $INSTALL_DIR"
+    # Extract into immutable first release; current symlink powers self-updates.
+    RELEASES_DIR="$INSTALL_DIR/releases"
+    CURRENT_LINK="$INSTALL_DIR/current"
+    FIRST_RELEASE_DIR="$RELEASES_DIR/initial"
+    rm -rf "$FIRST_RELEASE_DIR"
+    mkdir -p "$FIRST_RELEASE_DIR"
+    tar -xzf "$TARBALL" -C "$FIRST_RELEASE_DIR"
+    ln -sfn "$FIRST_RELEASE_DIR" "$CURRENT_LINK"
+    ln -sfn "$FIRST_RELEASE_DIR/dist" "$INSTALL_DIR/dist"
+    ln -sfn "$FIRST_RELEASE_DIR/package.json" "$INSTALL_DIR/package.json"
+    if [[ -f "$FIRST_RELEASE_DIR/pnpm-lock.yaml" ]]; then
+        ln -sfn "$FIRST_RELEASE_DIR/pnpm-lock.yaml" "$INSTALL_DIR/pnpm-lock.yaml"
+    fi
+    ok "Extracted to $FIRST_RELEASE_DIR"
 else
     echo -e "${YELLOW}[DRY]${NC}  curl -sf -o /tmp/agent.tar.gz $BACKEND_URL/api/agent-install/agent-files?t=..."
     echo -e "${YELLOW}[DRY]${NC}  mkdir -p $INSTALL_DIR && tar -xzf /tmp/agent.tar.gz -C $INSTALL_DIR"
@@ -253,7 +269,7 @@ fi
 info "Step 5/7: Installing dependencies..."
 
 if ! $DRY_RUN; then
-    cd "$INSTALL_DIR"
+    cd "$INSTALL_DIR/current"
     pnpm install --prod 2>&1 || die "Failed to install agent dependencies."
     ok "Dependencies installed"
 fi
@@ -275,6 +291,14 @@ LOG_BATCH_SIZE=100
 MAX_BUFFER_SIZE=1000
 PATH=$PATH
 PM2_BIN=$PM2_BIN
+AGENT_PM2_NAME=$PM2_NAME
+AGENT_UPDATE_ENABLED=$ENABLE_UPDATES
+AGENT_UPDATE_INTERVAL_MS=$UPDATE_INTERVAL_MS
+AGENT_UPDATE_STATE_DIR=$INSTALL_DIR/agent-data/updates
+AGENT_RELEASES_DIR=$INSTALL_DIR/releases
+AGENT_UPDATE_TRUST_DIR=/etc/monitoring-agent/trusted-keys
+AGENT_UPDATE_HELPER_PATH=$INSTALL_DIR/current/dist/bin/agent-updater.js
+AGENT_CURRENT_LINK=$INSTALL_DIR/current
 ENVEOF
     chmod 600 "$INSTALL_DIR/.env"
     ok "Configuration written to $INSTALL_DIR/.env"
@@ -290,7 +314,7 @@ info "Step 7/7: Starting agent..."
 
 if ! $DRY_RUN; then
     pm2 delete "$PM2_NAME" 2>/dev/null || true
-    pm2 start "$INSTALL_DIR/dist/index.js" --name "$PM2_NAME" --cwd "$INSTALL_DIR"
+    pm2 start "$INSTALL_DIR/current/dist/index.js" --name "$PM2_NAME" --cwd "$INSTALL_DIR/current" --update-env
     pm2 save
 
     ok "Agent started as PM2 process '$PM2_NAME'"
@@ -321,7 +345,7 @@ if ! $DRY_RUN; then
     fi
 else
     echo -e "${YELLOW}[DRY]${NC}  pm2 delete $PM2_NAME 2>/dev/null || true"
-    echo -e "${YELLOW}[DRY]${NC}  pm2 start $INSTALL_DIR/dist/index.js --name $PM2_NAME --cwd $INSTALL_DIR"
+    echo -e "${YELLOW}[DRY]${NC}  pm2 start $INSTALL_DIR/current/dist/index.js --name $PM2_NAME --cwd $INSTALL_DIR/current --update-env"
     echo -e "${YELLOW}[DRY]${NC}  pm2 save"
 fi
 

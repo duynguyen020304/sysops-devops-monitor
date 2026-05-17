@@ -180,7 +180,9 @@ public class ServersController : ControllerBase
             CreatedAt: server.CreatedAt,
             SshUsername: server.SshUsername,
             SshPort: server.SshPort,
-            SshPrivateKeyPath: server.SshPrivateKeyPath
+            SshPrivateKeyPath: server.SshPrivateKeyPath,
+            AgentBuildId: server.AgentBuildId,
+            AgentUpdateStatus: server.AgentUpdateStatus
         );
     }
 }

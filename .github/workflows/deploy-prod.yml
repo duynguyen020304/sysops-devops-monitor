@@ -385,6 +385,10 @@ jobs:
           export JwtSettings__RefreshTokenExpirationDays='${{ secrets.JWT_REFRESH_EXPIRATION_DAYS }}'
           export AllowedOrigins__0='${{ secrets.FRONTEND_URL }}'
           export AllowedOrigins__1='https://monitor-system.shiphard.studio'
+          export AGENT_BUILD_ID='${{ github.sha }}'
+          export GITHUB_SHA='${{ github.sha }}'
+          export AgentUpdates__PublicKeyId='${{ vars.AGENT_UPDATE_PUBLIC_KEY_ID || 'prod' }}'
+          export AgentUpdates__PrivateKeyPem='${{ secrets.AGENT_UPDATE_PRIVATE_KEY_PEM }}'
           EOF
           chmod 600 /root/Monitoring/backend/runtime-env.sh
 
@@ -445,6 +449,9 @@ jobs:
             cp /tmp/monitoring-agent-installer-files/pnpm-lock.yaml /root/Monitoring/agent/pnpm-lock.yaml
           fi
           cp /tmp/monitoring-agent-installer-files/install.sh /root/Monitoring/agent/install.sh
+          if [ -f /root/Monitoring/agent/package.json ]; then
+            node -e "const fs=require('fs');const p='/root/Monitoring/agent/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version=process.env.AGENT_VERSION||j.version||'1.0.0';fs.writeFileSync(p, JSON.stringify(j,null,2)+'\n')"
+          fi
           rm -rf /tmp/monitoring-agent-installer-files
 
           # Monitoring agent is not managed by CI.
