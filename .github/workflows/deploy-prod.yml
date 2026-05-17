@@ -73,25 +73,8 @@ jobs:
           path: backend/publish
           retention-days: 1
 
-      # ------------------------------------------
-      # Build Monitoring Agent
-      # ------------------------------------------
-      - name: Install & Build Agent
-        run: |
-          cd agent
-          pnpm install
-          pnpm run build
-
-      - name: Upload Agent Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: agent-dist
-          path: |
-            agent/dist
-            agent/package.json
-            agent/pnpm-lock.yaml
-            agent/install.sh
-          retention-days: 1
+      # Monitoring agent intentionally not built/deployed by CI.
+      # Agents must be installed only via generated install.sh links.
 
   # ==========================================
   # Deploy Job - Download Artifacts & Deploy
@@ -126,12 +109,6 @@ jobs:
         with:
           name: backend-publish
           path: backend/publish
-
-      - name: Download Agent Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: agent-dist
-          path: agent
 
       # ------------------------------------------
       # Resolve SSH transport & prepare client tools
@@ -302,16 +279,6 @@ jobs:
           rsync -avzr --delete -e "ssh -F $SSH_CONFIG_FILE" backend/publish/ monitoring-deploy:/tmp/monitoring-backend-deploy
 
       # ------------------------------------------
-      # Deploy Agent to Server
-      # ------------------------------------------
-      - name: Deploy Agent to Server
-        shell: bash
-        run: |
-          set -euo pipefail
-          SSH_CONFIG_FILE="$HOME/.ssh/config"
-          rsync -avzr --delete -e "ssh -F $SSH_CONFIG_FILE" agent/ monitoring-deploy:/tmp/monitoring-agent-deploy
-
-      # ------------------------------------------
       # Finalize Deployment & Restart Services
       # ------------------------------------------
       - name: Finalize Deployment via SSH
@@ -368,7 +335,6 @@ jobs:
           echo "Ensuring deployment directories exist..."
           mkdir -p /root/Monitoring/frontend
           mkdir -p /root/Monitoring/backend
-          mkdir -p /root/Monitoring/agent
 
           # ==========================================
           # 3. Create Backend Runtime Environment
@@ -390,23 +356,11 @@ jobs:
           chmod 600 /root/Monitoring/backend/runtime-env.sh
 
           # ==========================================
-          # 4. Create Agent Environment
-          # ==========================================
-          echo "Writing agent .env..."
-          cat > /root/Monitoring/agent/.env << EOF
-          API_URL=http://localhost:${BACKEND_PORT}
-          METRICS_INTERVAL=30000
-          HEARTBEAT_INTERVAL=60000
-          EOF
-          chmod 600 /root/Monitoring/agent/.env
-
-          # ==========================================
           # 5. Stop PM2 Processes
           # ==========================================
           echo "Stopping PM2 processes..."
           "$PM2_BIN" stop monitoring-frontend 2>/dev/null || true
           "$PM2_BIN" stop monitoring-api 2>/dev/null || true
-          "$PM2_BIN" stop monitoring-agent 2>/dev/null || true
 
           # ==========================================
           # 6. Deploy Frontend (Static Files)
@@ -447,29 +401,8 @@ jobs:
           EOF
           chmod +x /root/Monitoring/backend/start.sh
 
-          # ==========================================
-          # 8. Deploy Agent
-          # ==========================================
-          echo "Deploying Agent..."
-          cd /root/Monitoring/agent
-          # Backup current dist
-          if [ -d "dist" ]; then
-            mv dist dist.backup.$(date +%Y%m%d_%H%M%S) || true
-          fi
-          # Move new files
-          mv /tmp/monitoring-agent-deploy/dist .
-          mv /tmp/monitoring-agent-deploy/package.json .
-          if [ -f /tmp/monitoring-agent-deploy/pnpm-lock.yaml ]; then
-            mv /tmp/monitoring-agent-deploy/pnpm-lock.yaml .
-          fi
-          if [ -f /tmp/monitoring-agent-deploy/install.sh ]; then
-            mv /tmp/monitoring-agent-deploy/install.sh .
-          fi
-          rm -rf /tmp/monitoring-agent-deploy
-
-          # Install agent dependencies
-          echo "Installing agent dependencies..."
-          /root/.nvm/versions/node/v24.14.0/bin/pnpm install --prod
+          # Monitoring agent is not managed by CI.
+          # Install/update agents only via generated install.sh links.
 
           # ==========================================
           # 9. Restart PM2 Processes
@@ -477,7 +410,6 @@ jobs:
           echo "Restarting PM2 processes..."
           "$PM2_BIN" delete monitoring-frontend 2>/dev/null || true
           "$PM2_BIN" delete monitoring-api 2>/dev/null || true
-          "$PM2_BIN" delete monitoring-agent 2>/dev/null || true
 
           # Serve frontend static via serve (SPA mode - rewrites all 404s to index.html)
           if ! command -v serve &> /dev/null; then
@@ -487,9 +419,6 @@ jobs:
 
           # Start Backend
           "$PM2_BIN" start /root/Monitoring/backend/start.sh --name "monitoring-api"
-
-          # Start Agent
-          "$PM2_BIN" start /root/Monitoring/agent/dist/index.js --name "monitoring-agent" --cwd /root/Monitoring/agent
 
           # Save PM2 state
           "$PM2_BIN" save
@@ -503,9 +432,6 @@ jobs:
 
           cd /root/Monitoring/backend
           rm -rf publish.backup 2>/dev/null || true
-
-          cd /root/Monitoring/agent
-          ls -dt dist.backup.* 2>/dev/null | tail -n +4 | xargs rm -rf 2>/dev/null || true
 
           echo "=== Deployment Completed Successfully ==="
 
