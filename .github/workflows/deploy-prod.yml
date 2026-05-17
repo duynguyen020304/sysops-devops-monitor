@@ -388,7 +388,6 @@ jobs:
           cat > /root/Monitoring/backend/runtime-env.sh << EOF
           export ASPNETCORE_ENVIRONMENT='Production'
           export ASPNETCORE_URLS="http://localhost:${BACKEND_PORT}"
-          export CONNECTION_STRING='${{ secrets.POSTGRESQL_CONNECTION_STRING }}'
           export ConnectionStrings__DefaultConnection='${{ secrets.POSTGRESQL_CONNECTION_STRING }}'
           export JwtSettings__SecretKey='${{ secrets.JWT_SECRET_KEY }}'
           export JwtSettings__Issuer='${{ secrets.JWT_ISSUER }}'
@@ -397,7 +396,6 @@ jobs:
           export JwtSettings__RefreshTokenExpirationDays='${{ secrets.JWT_REFRESH_EXPIRATION_DAYS }}'
           export AllowedOrigins__0='${{ secrets.FRONTEND_URL }}'
           export AllowedOrigins__1='https://monitor-system.shiphard.studio'
-          export REDIS_CONNECTION='${{ secrets.REDIS_CONNECTION || vars.REDIS_CONNECTION || 'localhost:6380' }}'
           export Redis__ConnectionString='${{ secrets.REDIS_CONNECTION || vars.REDIS_CONNECTION || 'localhost:6380' }}'
           export Redis__Enabled='${{ vars.REDIS_ENABLED || 'true' }}'
           export Redis__InstanceName='${{ vars.REDIS_INSTANCE_NAME || 'monitoring' }}'
