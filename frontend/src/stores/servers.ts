@@ -9,6 +9,8 @@ export const useServersStore = defineStore('servers', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const deploying = ref(false)
+  const cleaning = ref(false)
+  const cleanupMessage = ref('')
   const deployResult = ref<DeployAgentResponse | null>(null)
 
   async function fetchServers() {
@@ -73,16 +75,36 @@ export const useServersStore = defineStore('servers', () => {
     }
   }
 
+  async function cleanupStaleServers() {
+    cleaning.value = true
+    cleanupMessage.value = ''
+    error.value = null
+    try {
+      const { data } = await serversApi.cleanupStale()
+      cleanupMessage.value = `Archived ${data.archivedCount} stale duplicate server${data.archivedCount === 1 ? '' : 's'}`
+      await fetchServers()
+      return data
+    } catch (err: unknown) {
+      error.value = err instanceof Error ? err.message : 'Failed to cleanup stale servers'
+      throw err
+    } finally {
+      cleaning.value = false
+    }
+  }
+
   return {
     servers,
     selectedServer,
     loading,
     error,
     deploying,
+    cleaning,
+    cleanupMessage,
     deployResult,
     fetchServers,
     selectServer,
     deleteServer,
     deployAgent,
+    cleanupStaleServers,
   }
 })

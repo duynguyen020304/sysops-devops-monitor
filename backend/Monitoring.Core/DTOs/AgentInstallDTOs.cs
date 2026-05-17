@@ -27,6 +27,8 @@ public record VerifyPasswordRequest(string Token, string Password);
 
 public record VerifyPasswordResponse(string DownloadUrl);
 
-public record AgentRegisterRequest(string Hostname, string Os, string Arch);
+public record AgentRegisterRequest(string Hostname, string Os, string Arch, string? MachineId = null);
 
 public record AgentRegisterResponse(Guid ServerId, string ServerToken, string ApiUrl);
+
+public record CleanupResponse(int ArchivedCount);

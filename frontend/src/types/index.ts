@@ -381,6 +381,10 @@ export interface AgentInstallTokenList {
   revokedAt: string | null
   status: 'active' | 'used' | 'expired' | 'revoked'
 }
+
+export interface CleanupResponse {
+  archivedCount: number
+}
 export interface MetricTimeSeries {
   timestamp: string
   value: number

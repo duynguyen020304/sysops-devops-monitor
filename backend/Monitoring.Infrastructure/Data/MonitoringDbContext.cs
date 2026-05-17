@@ -156,10 +156,14 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.AgentCapabilitiesJson);
             e.Property(x => x.AgentUpdateStatus).HasMaxLength(64);
             e.Property(x => x.ServerToken).HasMaxLength(128);
+            e.Property(x => x.MachineId).HasMaxLength(256);
+            e.Property(x => x.ArchiveReason).HasMaxLength(256);
             e.Property(x => x.SshUsername).HasMaxLength(128);
             e.Property(x => x.SshPort).HasDefaultValue(22);
             e.Property(x => x.SshPrivateKeyPath).HasMaxLength(512);
             e.HasIndex(x => x.WorkspaceId);
+            e.HasIndex(x => new { x.WorkspaceId, x.Hostname, x.ArchivedAt });
+            e.HasIndex(x => new { x.WorkspaceId, x.MachineId, x.ArchivedAt });
         });
 
         // AgentInstallToken
@@ -169,8 +173,10 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.Token).IsRequired().HasMaxLength(64);
             e.Property(x => x.PasswordHash).IsRequired();
             e.Property(x => x.ServerName).IsRequired().HasMaxLength(256);
+            e.Property(x => x.ArchiveReason).HasMaxLength(256);
             e.HasIndex(x => x.Token).IsUnique();
             e.HasIndex(x => x.WorkspaceId);
+            e.HasIndex(x => new { x.WorkspaceId, x.ServerName, x.ArchivedAt });
         });
 
         // AgentUpdateRelease

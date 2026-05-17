@@ -25,6 +25,7 @@ import type {
   DeployAgentResponse,
   AgentInstallToken,
   AgentInstallTokenList,
+  CleanupResponse,
   AgentUpdateRelease,
   AgentUpdateAssignment,
 } from '@/types'
@@ -108,6 +109,7 @@ export const serversApi = {
   getHealth: (id: string) => api.get<ServerHealth>(`/servers/${id}/health`),
   deployAgent: (id: string) =>
     api.post<DeployAgentResponse>(`/servers/${id}/deploy-agent`),
+  cleanupStale: () => api.post<CleanupResponse>('/servers/cleanup-stale'),
 }
 
 export const agentUpdateApi = {
@@ -175,6 +177,7 @@ export const agentInstallApi = {
     api.post<AgentInstallToken>('/agent-install/tokens', data),
   revokeToken: (id: string) =>
     api.post(`/agent-install/tokens/${id}/revoke`),
+  cleanupTokens: () => api.post<CleanupResponse>('/agent-install/tokens/cleanup'),
 }
 
 export default api

@@ -14,6 +14,7 @@ public class Server
     public string? AgentCapabilitiesJson { get; set; }
     public string? AgentUpdateStatus { get; set; }
     public string? ServerToken { get; set; }
+    public string? MachineId { get; set; }
     public string? SshUsername { get; set; } = "root";
     public int SshPort { get; set; } = 22;
     public string? SshPrivateKeyPath { get; set; }
@@ -21,4 +22,6 @@ public class Server
     public DateTimeOffset? LastHeartbeatAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public string? ArchiveReason { get; set; }
 }

@@ -26,6 +26,7 @@ public class ServerService : IServerService
             IpAddress = request.IpAddress,
             OperatingSystem = request.OperatingSystem,
             AgentVersion = request.AgentVersion,
+            MachineId = string.IsNullOrWhiteSpace(request.MachineId) ? null : request.MachineId,
             SshUsername = string.IsNullOrWhiteSpace(request.SshUsername) ? "root" : request.SshUsername,
             SshPort = request.SshPort is > 0 ? request.SshPort.Value : 22,
             SshPrivateKeyPath = request.SshPrivateKeyPath,
@@ -43,7 +44,7 @@ public class ServerService : IServerService
     public async Task<List<Server>> GetServersAsync(Guid workspaceId)
     {
         return await _db.Servers
-            .Where(s => s.WorkspaceId == workspaceId)
+            .Where(s => s.WorkspaceId == workspaceId && s.ArchivedAt == null)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
     }
@@ -62,6 +63,7 @@ public class ServerService : IServerService
         server.IpAddress = request.IpAddress;
         server.OperatingSystem = request.OperatingSystem;
         server.AgentVersion = request.AgentVersion;
+        server.MachineId = string.IsNullOrWhiteSpace(request.MachineId) ? null : request.MachineId;
         server.SshUsername = string.IsNullOrWhiteSpace(request.SshUsername) ? "root" : request.SshUsername;
         server.SshPort = request.SshPort is > 0 ? request.SshPort.Value : 22;
         server.SshPrivateKeyPath = request.SshPrivateKeyPath;

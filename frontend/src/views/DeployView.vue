@@ -13,6 +13,8 @@ const error = ref('')
 const copiedCurl = ref(false)
 const copiedPage = ref(false)
 const copiedPw = ref(false)
+const cleanupLoading = ref(false)
+const cleanupMessage = ref('')
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
@@ -59,6 +61,21 @@ async function revokeToken(id: string) {
     await loadTokens()
     if (generatedToken.value?.id === id) generatedToken.value = null
   } catch { /* ignore */ }
+}
+
+async function cleanupTokens() {
+  cleanupLoading.value = true
+  cleanupMessage.value = ''
+  error.value = ''
+  try {
+    const { data } = await agentInstallApi.cleanupTokens()
+    cleanupMessage.value = `Archived ${data.archivedCount} stale install link${data.archivedCount === 1 ? '' : 's'}`
+    await loadTokens()
+  } catch (e: any) {
+    error.value = e.response?.data?.message || 'Failed to cleanup tokens'
+  } finally {
+    cleanupLoading.value = false
+  }
 }
 
 function copyPassword() {
@@ -198,7 +215,17 @@ function statusIcon(status: string): string {
 
     <!-- Token List -->
     <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-6">
-      <h2 class="mb-4 text-lg font-semibold text-[var(--color-text)]">Install Links</h2>
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold text-[var(--color-text)]">Install Links</h2>
+        <button
+          @click="cleanupTokens"
+          :disabled="cleanupLoading"
+          class="rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-tertiary)] disabled:opacity-50"
+        >
+          {{ cleanupLoading ? 'Cleaning...' : 'Cleanup stale links' }}
+        </button>
+      </div>
+      <div v-if="cleanupMessage" class="mb-3 text-sm text-green-400">{{ cleanupMessage }}</div>
       <div v-if="tokens.length === 0" class="text-sm text-[var(--color-text-secondary)]">No install links generated yet.</div>
       <div v-else class="overflow-x-auto">
         <table class="w-full text-sm">

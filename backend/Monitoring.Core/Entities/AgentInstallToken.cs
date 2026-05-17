@@ -13,4 +13,6 @@ public class AgentInstallToken
     public DateTime? UsedAt { get; set; }
     public DateTime? RevokedAt { get; set; }
     public Guid WorkspaceId { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public string? ArchiveReason { get; set; }
 }

@@ -96,6 +96,34 @@ public class ServersController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("cleanup-stale")]
+    [RequirePermission("connect_agents")]
+    public async Task<IActionResult> CleanupStaleServers()
+    {
+        var workspaceId = GetWorkspaceId();
+        var servers = await _db.Servers
+            .Where(s => s.WorkspaceId == workspaceId && s.ArchivedAt == null)
+            .OrderByDescending(s => s.LastHeartbeatAt ?? DateTimeOffset.MinValue)
+            .ThenByDescending(s => s.CreatedAt)
+            .ToListAsync();
+        var now = DateTime.UtcNow;
+        var staleBefore = DateTimeOffset.UtcNow.AddMinutes(-2);
+        var archived = 0;
+        foreach (var group in servers.GroupBy(s => !string.IsNullOrWhiteSpace(s.MachineId) ? $"m:{s.MachineId}" : $"h:{s.Hostname}"))
+        {
+            var keep = group.First();
+            foreach (var server in group.Skip(1))
+            {
+                if (server.LastHeartbeatAt is not null && server.LastHeartbeatAt > staleBefore && server.Status == Core.Enums.ServerStatus.Healthy) continue;
+                server.ArchivedAt = now;
+                server.ArchiveReason = "manual stale duplicate cleanup";
+                archived++;
+            }
+        }
+        await _db.SaveChangesAsync();
+        return Ok(new CleanupResponse(archived));
+    }
+
     [HttpPost("{id:guid}/deploy-agent")]
     [RequirePermission("deploy_agents")]
     public async Task<ActionResult<DeployAgentResponse>> DeployAgent(Guid id, CancellationToken ct)

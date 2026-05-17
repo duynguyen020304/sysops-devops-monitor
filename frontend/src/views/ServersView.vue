@@ -55,15 +55,34 @@ async function deployAgent(serverId: string, event: MouseEvent) {
     // shown via store.error
   }
 }
+
+async function cleanupStaleServers() {
+  try {
+    await store.cleanupStaleServers()
+  } catch {
+    // shown via store.error
+  }
+}
 </script>
 
 <template>
   <div>
-    <div class="mb-6">
-      <h2 class="text-xl font-bold text-[var(--color-text)]">Servers</h2>
-      <p class="mt-1 text-sm text-[var(--color-text-secondary)]">
-        Monitor connected servers and their health
-      </p>
+    <div class="mb-6 flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 class="text-xl font-bold text-[var(--color-text)]">Servers</h2>
+        <p class="mt-1 text-sm text-[var(--color-text-secondary)]">
+          Monitor connected servers and their health
+        </p>
+        <p v-if="store.cleanupMessage" class="mt-2 text-sm text-green-400">{{ store.cleanupMessage }}</p>
+        <p v-if="store.error" class="mt-2 text-sm text-red-400">{{ store.error }}</p>
+      </div>
+      <button
+        class="rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-tertiary)] disabled:opacity-50"
+        :disabled="store.cleaning"
+        @click="cleanupStaleServers"
+      >
+        {{ store.cleaning ? 'Cleaning...' : 'Cleanup stale duplicates' }}
+      </button>
     </div>
 
     <!-- Loading -->
