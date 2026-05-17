@@ -9,4 +9,4 @@ public record SystemMetricsDto(double CpuUsagePercent, long MemoryTotalBytes, lo
 public record AgentPM2Request(Guid ServerId, List<PM2ProcessDto> Processes);
 public record PM2ProcessDto(int Pm2Id, string Name, int Pid, string Status, long UptimeSeconds, int RestartCount, double CpuUsage, long MemoryUsage, string ExecutionMode, string NodeVersion);
 public record AgentLogsRequest(Guid ServerId, List<AgentLogEntry> Logs);
-public record AgentLogEntry(Guid? ProcessId, string? ProcessName, string StreamType, string Level, string Message);
+public record AgentLogEntry(Guid? ProcessId, string? ProcessName, string StreamType, string Level, string Message, DateTimeOffset? Timestamp = null);

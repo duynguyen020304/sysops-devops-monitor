@@ -12,5 +12,6 @@ public class PM2Log
     public required string Level { get; set; }
     public required string Message { get; set; }
     public required string RawMessage { get; set; }
+    public required string Fingerprint { get; set; }
     public DateTime CreatedAt { get; set; }
 }

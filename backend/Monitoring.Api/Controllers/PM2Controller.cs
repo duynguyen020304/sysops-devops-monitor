@@ -111,7 +111,7 @@ public class PM2Controller : ControllerBase
 
         var dtos = logs.Select(l => new PM2LogDto(
             Id: l.Id,
-            StreamType: l.StreamType.ToString(),
+            StreamType: l.StreamType == Monitoring.Core.Enums.LogStreamType.StdErr ? "stderr" : "stdout",
             Timestamp: l.Timestamp,
             Level: l.Level,
             Message: l.Message
