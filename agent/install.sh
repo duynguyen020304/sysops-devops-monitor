@@ -108,6 +108,22 @@ info "Dir:     $INSTALL_DIR"
 echo ""
 
 # ==========================================
+# Runtime PATH bootstrap
+# ==========================================
+export PNPM_HOME="${PNPM_HOME:-/root/.local/share/pnpm}"
+export PATH="$PNPM_HOME:$PNPM_HOME/bin:/root/.bun/bin:/root/.bun/install/global/node_modules/.bin:$PATH"
+if [[ -s "${NVM_DIR:-/root/.nvm}/nvm.sh" ]]; then
+    # shellcheck disable=SC1091
+    . "${NVM_DIR:-/root/.nvm}/nvm.sh"
+fi
+if ! command -v node &>/dev/null; then
+    NODE_BIN=$(find /root/.nvm/versions/node -maxdepth 3 -type f -name node 2>/dev/null | sort -V | tail -1 || true)
+    if [[ -n "$NODE_BIN" ]]; then
+        export PATH="$(dirname "$NODE_BIN"):$PATH"
+    fi
+fi
+
+# ==========================================
 # Step 1: Register with backend
 # ==========================================
 info "Step 1/7: Registering server with backend..."
@@ -162,14 +178,30 @@ if command -v node &>/dev/null; then
     else
         warn "Node.js $(node -v) found, but $NODE_MAJOR+ required"
         info "Installing Node.js $NODE_MAJOR..."
-        run_cmd curl -fsSL https://deb.nodesource.com/setup_$NODE_MAJOR.x | bash -
-        run_cmd apt-get install -y nodejs
+        if command -v apt-get &>/dev/null; then
+            run_cmd curl -fsSL https://deb.nodesource.com/setup_$NODE_MAJOR.x | bash -
+            run_cmd apt-get install -y nodejs
+        elif command -v dnf &>/dev/null; then
+            run_cmd dnf install -y nodejs npm
+        elif command -v yum &>/dev/null; then
+            run_cmd yum install -y nodejs npm
+        else
+            die "Node.js $NODE_MAJOR+ required, but no supported package manager found. Install Node.js, then rerun."
+        fi
     fi
 else
     info "Node.js not found. Installing Node.js $NODE_MAJOR..."
     if ! $DRY_RUN; then
-        curl -fsSL https://deb.nodesource.com/setup_$NODE_MAJOR.x | bash -
-        apt-get install -y nodejs
+        if command -v apt-get &>/dev/null; then
+            curl -fsSL https://deb.nodesource.com/setup_$NODE_MAJOR.x | bash -
+            apt-get install -y nodejs
+        elif command -v dnf &>/dev/null; then
+            dnf install -y nodejs npm
+        elif command -v yum &>/dev/null; then
+            yum install -y nodejs npm
+        else
+            die "Node.js $NODE_MAJOR+ required, but no supported package manager found. Install Node.js, then rerun."
+        fi
     fi
 fi
 
