@@ -23,8 +23,14 @@ const pageSize = 20
 // Log viewer state
 const showLogs = ref(false)
 const logsLoading = ref(false)
+const logsLoadingMore = ref(false)
+const logsError = ref<string | null>(null)
 const selectedRun = ref<WorkflowRun | null>(null)
 const logs = ref<WorkflowLog[]>([])
+const nextLogCursor = ref<string | null>(null)
+const hasMoreLogs = ref(false)
+let logRequestId = 0
+const logPageLimit = 200
 
 // Time range filter
 const timeRange = ref('all')
@@ -63,27 +69,68 @@ async function loadPage(page: number) {
   }
 }
 
+function mapWorkflowLog(log: WorkflowLog): WorkflowLog & { source: string } {
+  return {
+    ...log,
+    source: [log.jobName, log.stepName].filter(Boolean).join(' / '),
+  }
+}
+
 async function viewLogs(run: WorkflowRun) {
+  const requestId = ++logRequestId
   selectedRun.value = run
   showLogs.value = true
   logsLoading.value = true
+  logsLoadingMore.value = false
+  logsError.value = null
+  logs.value = []
+  nextLogCursor.value = null
+  hasMoreLogs.value = false
   try {
-    const { data } = await repositoriesApi.getWorkflowLogs(repoId.value, run.githubRunId)
-    logs.value = (data.items ?? []).map((log: WorkflowLog) => ({
-      ...log,
-      source: [log.jobName, log.stepName].filter(Boolean).join(' / '),
-    }))
+    const { data } = await repositoriesApi.getWorkflowLogs(repoId.value, run.githubRunId, { limit: logPageLimit })
+    if (requestId !== logRequestId) return
+    logs.value = (data.items ?? []).map(mapWorkflowLog)
+    nextLogCursor.value = data.nextCursor
+    hasMoreLogs.value = data.hasMore
   } catch {
+    if (requestId !== logRequestId) return
     logs.value = []
+    logsError.value = 'Failed to load workflow logs'
   } finally {
-    logsLoading.value = false
+    if (requestId === logRequestId) logsLoading.value = false
+  }
+}
+
+async function loadMoreLogs() {
+  if (!selectedRun.value || logsLoading.value || logsLoadingMore.value || !hasMoreLogs.value) return
+  const requestId = logRequestId
+  logsLoadingMore.value = true
+  logsError.value = null
+  try {
+    const { data } = await repositoriesApi.getWorkflowLogs(repoId.value, selectedRun.value.githubRunId, {
+      cursor: nextLogCursor.value,
+      limit: logPageLimit,
+    })
+    if (requestId !== logRequestId) return
+    logs.value = [...logs.value, ...(data.items ?? []).map(mapWorkflowLog)]
+    nextLogCursor.value = data.nextCursor
+    hasMoreLogs.value = data.hasMore
+  } catch {
+    if (requestId !== logRequestId) return
+    logsError.value = 'Failed to load more logs'
+  } finally {
+    if (requestId === logRequestId) logsLoadingMore.value = false
   }
 }
 
 function closeLogs() {
+  logRequestId++
   showLogs.value = false
   selectedRun.value = null
   logs.value = []
+  nextLogCursor.value = null
+  hasMoreLogs.value = false
+  logsError.value = null
 }
 
 function statusBadgeClass(conclusion: string): string {
@@ -389,7 +436,13 @@ onMounted(loadRepoData)
           </div>
 
           <div v-else class="flex flex-1 flex-col overflow-hidden p-4">
-            <LogViewer :logs="logs" />
+            <LogViewer
+              :logs="logs"
+              :has-more="hasMoreLogs"
+              :loading-more="logsLoadingMore"
+              :error-message="logsError"
+              @load-more="loadMoreLogs"
+            />
           </div>
         </div>
       </div>

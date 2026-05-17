@@ -142,6 +142,8 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.Message).IsRequired();
             e.Property(x => x.RawMessage).IsRequired();
             e.HasIndex(x => x.WorkflowRunId);
+            e.HasIndex(x => new { x.WorkflowRunId, x.LineNumber, x.Id });
+            e.HasIndex(x => new { x.WorkflowRunId, x.LineNumber }).IsUnique();
         });
 
         // Server

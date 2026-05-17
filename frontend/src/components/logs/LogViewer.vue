@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 
 interface LogLine {
   id: string
@@ -7,6 +7,7 @@ interface LogLine {
   level: string
   source?: string
   message: string
+  rawMessage?: string
   sourceType?: string
   sourceName?: string | null
 }
@@ -15,19 +16,28 @@ const props = withDefaults(
   defineProps<{
     logs: LogLine[]
     showSourceLink?: boolean
+    hasMore?: boolean
+    loadingMore?: boolean
+    errorMessage?: string | null
   }>(),
   {
     showSourceLink: false,
+    hasMore: false,
+    loadingMore: false,
+    errorMessage: null,
   },
 )
 
 const emit = defineEmits<{
   'source-click': [entry: LogLine]
+  'load-more': []
 }>()
 
 const searchQuery = ref('')
 const autoScroll = ref(true)
 const logContainer = ref<HTMLElement | null>(null)
+const loadMoreSentinel = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
 
 const filteredLogs = computed(() => {
   if (!searchQuery.value.trim()) return props.logs
@@ -66,6 +76,29 @@ function handleSourceClick(entry: LogLine) {
     emit('source-click', entry)
   }
 }
+
+function setupObserver() {
+  observer?.disconnect()
+  if (!loadMoreSentinel.value || !logContainer.value) return
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting) && props.hasMore && !props.loadingMore) {
+        emit('load-more')
+      }
+    },
+    { root: logContainer.value, rootMargin: '160px' },
+  )
+  observer.observe(loadMoreSentinel.value)
+}
+
+onMounted(async () => {
+  await nextTick()
+  setupObserver()
+})
+
+onBeforeUnmount(() => observer?.disconnect())
+
+watch(loadMoreSentinel, setupObserver)
 
 watch(
   () => props.logs.length,
@@ -107,7 +140,7 @@ watch(
         />
         Auto-scroll
       </label>
-      <span class="text-xs text-gray-500">{{ filteredLogs.length }} lines</span>
+      <span class="text-xs text-gray-500">{{ filteredLogs.length }} loaded lines</span>
     </div>
 
     <!-- Log lines -->
@@ -135,7 +168,26 @@ watch(
           {{ log.level }}
         </span>
         <span v-if="log.source" class="text-gray-500">{{ log.source }}</span>
-        <span class="flex-1 break-all text-gray-300">{{ log.message }}</span>
+        <span class="flex-1 break-all text-gray-300">{{ log.rawMessage || log.message }}</span>
+      </div>
+
+      <div ref="loadMoreSentinel" class="flex items-center justify-center px-4 py-3 text-xs text-gray-500">
+        <span v-if="loadingMore">Loading more logs...</span>
+        <button
+          v-else-if="errorMessage"
+          class="rounded border border-red-500/30 px-2 py-1 text-red-400 hover:bg-red-500/10"
+          @click="emit('load-more')"
+        >
+          {{ errorMessage }}. Retry
+        </button>
+        <button
+          v-else-if="hasMore"
+          class="rounded border border-gray-700 px-2 py-1 hover:bg-gray-800"
+          @click="emit('load-more')"
+        >
+          Load more
+        </button>
+        <span v-else-if="logs.length > 0">End of logs</span>
       </div>
     </div>
   </div>

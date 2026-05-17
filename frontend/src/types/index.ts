@@ -113,11 +113,20 @@ export interface WorkflowRun {
 
 export interface WorkflowLog {
   id: string
+  lineNumber: number
   jobName: string
   stepName: string
   timestamp: string
   level: string
   message: string
+  rawMessage: string
+}
+
+export interface WorkflowLogPage {
+  items: WorkflowLog[]
+  nextCursor: string | null
+  hasMore: boolean
+  limit: number
 }
 
 export interface RepositoryStats {

@@ -32,16 +32,25 @@ public record WorkflowRunDto(
 
 public record WorkflowLogDto(
     Guid Id,
+    int LineNumber,
     string JobName,
     string StepName,
     DateTimeOffset Timestamp,
     string Level,
-    string Message
+    string Message,
+    string RawMessage
+);
+
+public record WorkflowLogPageDto(
+    List<WorkflowLogDto> Items,
+    string? NextCursor,
+    bool HasMore,
+    int Limit
 );
 
 public record WorkflowRunDetailDto(
     WorkflowRunDto Run,
-    List<WorkflowLogDto> Logs
+    WorkflowLogPageDto Logs
 );
 
 public record RepositoryStatsDto(

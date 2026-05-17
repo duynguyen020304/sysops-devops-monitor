@@ -8,6 +8,7 @@ public class WorkflowLog
     public Guid WorkflowRunId { get; set; }
     public required string JobName { get; set; }
     public required string StepName { get; set; }
+    public int LineNumber { get; set; }
     public DateTimeOffset Timestamp { get; set; }
     public required string Level { get; set; }
     public required string Message { get; set; }

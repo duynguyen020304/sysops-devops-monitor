@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Monitoring.Core.DTOs;
@@ -13,6 +14,7 @@ public class GitHubService : IGitHubService
 {
     private readonly MonitoringDbContext _db;
     private readonly HttpClient _httpClient;
+    private const int MaxLogPageLimit = 1000;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -183,10 +185,11 @@ public class GitHubService : IGitHubService
             .FirstOrDefaultAsync(r => r.RepositoryId == repositoryId && r.GithubRunId == githubRunId)
             ?? throw new InvalidOperationException("Workflow run not found.");
 
-        // Check if logs already cached
+        // Check if logs already persisted
         var existingLogs = await _db.WorkflowLogs
             .Where(l => l.WorkflowRunId == workflowRun.Id)
-            .OrderBy(l => l.Timestamp)
+            .OrderBy(l => l.LineNumber)
+            .ThenBy(l => l.Id)
             .ToListAsync();
 
         if (existingLogs.Count > 0)
@@ -210,22 +213,61 @@ public class GitHubService : IGitHubService
         using (var zipStream = new MemoryStream(zipBytes))
         using (var archive = new System.IO.Compression.ZipArchive(zipStream, ZipArchiveMode.Read))
         {
-            foreach (var entry in archive.Entries)
+            var lineNumber = 0;
+            foreach (var entry in archive.Entries
+                .Where(e => e.FullName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(e => e.FullName, StringComparer.Ordinal))
             {
-                if (!entry.FullName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
                 var jobName = Path.GetFileNameWithoutExtension(entry.Name);
                 using var reader = new StreamReader(entry.Open());
                 var content = await reader.ReadToEndAsync();
-                logs.AddRange(ParseLogContent(content, workflowRun.Id, jobName));
+                logs.AddRange(ParseLogContent(content, workflowRun.Id, jobName, ref lineNumber));
             }
         }
 
         _db.WorkflowLogs.AddRange(logs);
         await _db.SaveChangesAsync();
 
-        return logs;
+        return logs
+            .OrderBy(l => l.LineNumber)
+            .ThenBy(l => l.Id)
+            .ToList();
+    }
+
+    public async Task<WorkflowLogPageDto> GetWorkflowLogPageAsync(Guid repositoryId, long githubRunId, string? cursor, int limit)
+    {
+        limit = Math.Clamp(limit, 1, MaxLogPageLimit);
+        await GetWorkflowLogsAsync(repositoryId, githubRunId);
+
+        var workflowRun = await _db.WorkflowRuns
+            .FirstOrDefaultAsync(r => r.RepositoryId == repositoryId && r.GithubRunId == githubRunId)
+            ?? throw new InvalidOperationException("Workflow run not found.");
+
+        var lastLineNumber = DecodeCursor(cursor);
+        var query = _db.WorkflowLogs
+            .AsNoTracking()
+            .Where(l => l.WorkflowRunId == workflowRun.Id);
+
+        if (lastLineNumber.HasValue)
+            query = query.Where(l => l.LineNumber > lastLineNumber.Value);
+
+        var logs = await query
+            .OrderBy(l => l.LineNumber)
+            .ThenBy(l => l.Id)
+            .Take(limit + 1)
+            .ToListAsync();
+
+        var hasMore = logs.Count > limit;
+        var pageLogs = logs.Take(limit).ToList();
+        var nextCursor = hasMore && pageLogs.Count > 0
+            ? EncodeCursor(pageLogs[^1].LineNumber)
+            : null;
+
+        return new WorkflowLogPageDto(
+            pageLogs.Select(ToWorkflowLogDto).ToList(),
+            nextCursor,
+            hasMore,
+            limit);
     }
 
     public async Task<RepositoryStatsDto> GetRepositoryStatsAsync(Guid repositoryId)
@@ -281,7 +323,7 @@ public class GitHubService : IGitHubService
         }
     }
 
-    private static List<WorkflowLog> ParseLogContent(string logContent, Guid workflowRunId, string jobName = "unknown")
+    private static List<WorkflowLog> ParseLogContent(string logContent, Guid workflowRunId, string jobName, ref int lineNumber)
     {
         var logs = new List<WorkflowLog>();
         var lines = logContent.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -289,8 +331,11 @@ public class GitHubService : IGitHubService
         var currentJob = jobName;
         var currentStep = "unknown";
 
-        foreach (var line in lines)
+        foreach (var rawLine in lines)
         {
+            var line = rawLine.TrimEnd((char)13);
+            lineNumber++;
+
             // Parse job/step headers from log format
             if (line.StartsWith("##[group]"))
             {
@@ -322,14 +367,45 @@ public class GitHubService : IGitHubService
                 WorkflowRunId = workflowRunId,
                 JobName = currentJob,
                 StepName = currentStep,
+                LineNumber = lineNumber,
                 Timestamp = DateTimeOffset.UtcNow,
                 Level = level,
-                Message = line.Length > 4000 ? line[..4000] : line,
+                Message = line,
                 RawMessage = line,
                 CreatedAt = DateTime.UtcNow
             });
         }
 
         return logs;
+    }
+
+    private static WorkflowLogDto ToWorkflowLogDto(WorkflowLog log) => new(
+        Id: log.Id,
+        LineNumber: log.LineNumber,
+        JobName: log.JobName,
+        StepName: log.StepName,
+        Timestamp: log.Timestamp,
+        Level: log.Level,
+        Message: log.Message,
+        RawMessage: log.RawMessage
+    );
+
+    private static string EncodeCursor(int lineNumber) =>
+        Convert.ToBase64String(Encoding.UTF8.GetBytes(lineNumber.ToString()));
+
+    private static int? DecodeCursor(string? cursor)
+    {
+        if (string.IsNullOrWhiteSpace(cursor))
+            return null;
+
+        try
+        {
+            var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
+            return int.TryParse(decoded, out var lineNumber) ? lineNumber : null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
     }
 }

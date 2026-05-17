@@ -77,7 +77,7 @@ public class WorkflowsController : ControllerBase
         if (run is null)
             return NotFound();
 
-        var logs = await _gitHubService.GetWorkflowLogsAsync(repositoryId, runId);
+        var logPage = await _gitHubService.GetWorkflowLogPageAsync(repositoryId, runId, cursor: null, limit: 100);
 
         var runDto = new WorkflowRunDto(
             Id: run.Id,
@@ -96,25 +96,17 @@ public class WorkflowsController : ControllerBase
             HtmlUrl: run.HtmlUrl
         );
 
-        var logDtos = logs.Select(l => new WorkflowLogDto(
-            Id: l.Id,
-            JobName: l.JobName,
-            StepName: l.StepName,
-            Timestamp: l.Timestamp,
-            Level: l.Level,
-            Message: l.Message
-        )).ToList();
-
-        return Ok(new WorkflowRunDetailDto(runDto, logDtos));
+        return Ok(new WorkflowRunDetailDto(runDto, logPage));
     }
 
     [HttpGet("{runId:long}/logs")]
     [RequirePermission("view_servers")]
-    public async Task<ActionResult<PagedResult<WorkflowLogDto>>> GetWorkflowLogs(
+    public async Task<ActionResult<WorkflowLogPageDto>> GetWorkflowLogs(
         Guid repositoryId,
         long runId,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 100)
+        [FromQuery] string? cursor = null,
+        [FromQuery] int limit = 200,
+        [FromQuery] int? pageSize = null)
     {
         var repository = await _gitHubService.GetRepositoryAsync(repositoryId);
         if (repository is null)
@@ -122,24 +114,9 @@ public class WorkflowsController : ControllerBase
 
         await EnsureSameWorkspace(repository.WorkspaceId);
 
-        var logs = await _gitHubService.GetWorkflowLogsAsync(repositoryId, runId);
-
-        var total = logs.Count;
-        var pagedLogs = logs
-            .OrderBy(l => l.Timestamp)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(l => new WorkflowLogDto(
-                Id: l.Id,
-                JobName: l.JobName,
-                StepName: l.StepName,
-                Timestamp: l.Timestamp,
-                Level: l.Level,
-                Message: l.Message
-            ))
-            .ToList();
-
-        return Ok(new PagedResult<WorkflowLogDto>(pagedLogs, total, page, pageSize));
+        var effectiveLimit = pageSize.HasValue && pageSize.Value > 0 ? pageSize.Value : limit;
+        var logPage = await _gitHubService.GetWorkflowLogPageAsync(repositoryId, runId, cursor, effectiveLimit);
+        return Ok(logPage);
     }
 
     [HttpGet("~/api/repositories/{repositoryId:guid}/stats")]

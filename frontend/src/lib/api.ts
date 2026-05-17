@@ -4,7 +4,7 @@ import router from '@/router'
 import type {
   Repository,
   WorkflowRun,
-  WorkflowLog,
+  WorkflowLogPage,
   RepositoryStats,
   PagedResult,
   Server,
@@ -94,8 +94,8 @@ export const repositoriesApi = {
     }),
   getWorkflowDetail: (repoId: string, runId: string) =>
     api.get<WorkflowRun>(`/repositories/${repoId}/workflows/${runId}`),
-  getWorkflowLogs: (repoId: string, runId: number) =>
-    api.get<PagedResult<WorkflowLog>>(`/repositories/${repoId}/workflows/${runId}/logs`),
+  getWorkflowLogs: (repoId: string, runId: number, params?: { cursor?: string | null; limit?: number }) =>
+    api.get<WorkflowLogPage>(`/repositories/${repoId}/workflows/${runId}/logs`, { params }),
   getStats: (id: string) =>
     api.get<RepositoryStats>(`/repositories/${id}/stats`),
 }
