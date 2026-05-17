@@ -14,16 +14,18 @@ public class GitHubService : IGitHubService
 {
     private readonly MonitoringDbContext _db;
     private readonly HttpClient _httpClient;
+    private readonly IWorkflowLogCache _workflowLogCache;
     private const int MaxLogPageLimit = 1000;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
-    public GitHubService(MonitoringDbContext db, IHttpClientFactory httpClientFactory)
+    public GitHubService(MonitoringDbContext db, IHttpClientFactory httpClientFactory, IWorkflowLogCache workflowLogCache)
     {
         _db = db;
         _httpClient = httpClientFactory.CreateClient("GitHub");
+        _workflowLogCache = workflowLogCache;
     }
 
     public async Task<Repository> ConnectRepositoryAsync(Guid workspaceId, string githubToken, string owner, string name)
@@ -185,6 +187,10 @@ public class GitHubService : IGitHubService
             .FirstOrDefaultAsync(r => r.RepositoryId == repositoryId && r.GithubRunId == githubRunId)
             ?? throw new InvalidOperationException("Workflow run not found.");
 
+        var cachedLogs = await _workflowLogCache.GetAsync(repositoryId, githubRunId);
+        if (cachedLogs is { Count: > 0 })
+            return cachedLogs.ToList();
+
         // Check if logs already persisted
         var existingLogs = await _db.WorkflowLogs
             .Where(l => l.WorkflowRunId == workflowRun.Id)
@@ -193,7 +199,10 @@ public class GitHubService : IGitHubService
             .ToListAsync();
 
         if (existingLogs.Count > 0)
+        {
+            await _workflowLogCache.SetAsync(repositoryId, githubRunId, existingLogs);
             return existingLogs;
+        }
 
         // Fetch from GitHub
         if (string.IsNullOrEmpty(repository.AccessToken))
@@ -228,10 +237,13 @@ public class GitHubService : IGitHubService
         _db.WorkflowLogs.AddRange(logs);
         await _db.SaveChangesAsync();
 
-        return logs
+        var orderedLogs = logs
             .OrderBy(l => l.LineNumber)
             .ThenBy(l => l.Id)
             .ToList();
+        await _workflowLogCache.SetAsync(repositoryId, githubRunId, orderedLogs);
+
+        return orderedLogs;
     }
 
     public async Task<WorkflowLogPageDto> GetWorkflowLogPageAsync(Guid repositoryId, long githubRunId, string? cursor, int limit)

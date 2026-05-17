@@ -91,9 +91,32 @@ builder.Services.AddCors(options =>
     });
 });
 
+var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION")
+    ?? builder.Configuration["Redis:ConnectionString"];
+var redisEnabled = bool.TryParse(builder.Configuration["Redis:Enabled"], out var configuredRedisEnabled)
+    ? configuredRedisEnabled && !string.IsNullOrWhiteSpace(redisConnectionString)
+    : !string.IsNullOrWhiteSpace(redisConnectionString);
+builder.Services.Configure<WorkflowLogCacheOptions>(options =>
+{
+    options.ConnectionString = redisConnectionString;
+    options.Enabled = redisEnabled;
+    options.InstanceName = builder.Configuration["Redis:InstanceName"] ?? options.InstanceName;
+    if (int.TryParse(builder.Configuration["Redis:WorkflowLogTtlHours"], out var ttlHours))
+        options.WorkflowLogTtlHours = ttlHours;
+});
+
 // DI registration
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddSingleton<IWorkflowLogCache>(serviceProvider =>
+{
+    var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<WorkflowLogCacheOptions>>().Value;
+    return options.Enabled && !string.IsNullOrWhiteSpace(options.ConnectionString)
+        ? new RedisWorkflowLogCache(
+            serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<WorkflowLogCacheOptions>>(),
+            serviceProvider.GetRequiredService<ILogger<RedisWorkflowLogCache>>())
+        : new NullWorkflowLogCache();
+});
 builder.Services.AddScoped<IGitHubService, GitHubService>();
 builder.Services.AddScoped<IServerService, ServerService>();
 builder.Services.AddScoped<IDeployService, DeployService>();
