@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Monitoring.Core;
 using Monitoring.Core.Entities;
 using Monitoring.Core.Enums;
 using Monitoring.Core.Interfaces;
@@ -101,6 +102,8 @@ builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ILogService, LogService>();
 builder.Services.AddSingleton<ILogMaskingService, LogMaskingService>();
 builder.Services.AddScoped<IAlertService, AlertService>();
+builder.Services.AddScoped<IAgentCleanupService, AgentCleanupService>();
+builder.Services.Configure<AgentCleanupOptions>(builder.Configuration.GetSection("AgentCleanup"));
 
 // HttpClient for GitHub API
 builder.Services.AddHttpClient("GitHub", client =>
@@ -117,6 +120,7 @@ builder.Services.AddHostedService<LogRetentionService>();
 builder.Services.AddHostedService<AlertEvaluationService>();
 builder.Services.AddHostedService<AgentReleasePublisherService>();
 builder.Services.AddHostedService<AgentUpdateSchedulerService>();
+builder.Services.AddHostedService<AgentCleanupHostedService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

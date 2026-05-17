@@ -18,9 +18,10 @@ public class AgentInstallController : ControllerBase
     private readonly MonitoringDbContext _db;
     private readonly IConfiguration _config;
     private readonly IWebHostEnvironment _env;
+    private readonly Monitoring.Core.Interfaces.IAgentCleanupService _cleanupService;
 
-    public AgentInstallController(MonitoringDbContext db, IConfiguration config, IWebHostEnvironment env)
-    { _db = db; _config = config; _env = env; }
+    public AgentInstallController(MonitoringDbContext db, IConfiguration config, IWebHostEnvironment env, Monitoring.Core.Interfaces.IAgentCleanupService cleanupService)
+    { _db = db; _config = config; _env = env; _cleanupService = cleanupService; }
 
     [HttpGet("tokens"), Authorize, RequirePermission("deploy_agents")]
     public async Task<IActionResult> ListTokens()
@@ -62,8 +63,7 @@ public class AgentInstallController : ControllerBase
     public async Task<IActionResult> CleanupTokens()
     {
         var user = await _db.Users.FindAsync(GetUserId()); if (user is null) return Unauthorized();
-        var archived = await ArchiveStaleTokensAsync(user.WorkspaceId, null, "manual cleanup");
-        await _db.SaveChangesAsync();
+        var archived = await _cleanupService.ArchiveStaleTokensAsync(user.WorkspaceId, null, "manual cleanup");
         return Ok(new CleanupResponse(archived));
     }
 
@@ -114,8 +114,10 @@ public class AgentInstallController : ControllerBase
         var machineId = string.IsNullOrWhiteSpace(request.MachineId) ? null : request.MachineId;
         var server = new Server { Id = Guid.NewGuid(), WorkspaceId = installToken.WorkspaceId, Hostname = hostname, IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown", OperatingSystem = $"{request.Os ?? "unknown"} {request.Arch ?? ""}".Trim(), AgentVersion = "1.0.0", ServerToken = serverToken, MachineId = machineId, Status = ServerStatus.Unknown, CreatedAt = now, UpdatedAt = now };
         installToken.ServerId = server.Id; _db.Servers.Add(server);
-        await ArchiveStaleTokensAsync(installToken.WorkspaceId, installToken.ServerName, "registered newer agent", installToken.Id);
-        await ArchiveStaleServerDuplicatesAsync(installToken.WorkspaceId, server.Id, hostname, machineId, "registered newer agent");
+        _db.AgentInstallTokens.Update(installToken);
+        await _db.SaveChangesAsync();
+        await _cleanupService.ArchiveStaleTokensAsync(installToken.WorkspaceId, installToken.ServerName, "registered newer agent", installToken.Id);
+        await _cleanupService.ArchiveStaleServerDuplicatesAsync(installToken.WorkspaceId, server.Id, hostname, machineId, "registered newer agent");
         await _db.SaveChangesAsync();
         var baseUrl = GetBaseUrl(); var apiUrl = baseUrl.Contains(":") ? baseUrl : $"{baseUrl.Replace("https://", "http://")}:5000";
         return Ok(new AgentRegisterResponse(server.Id, serverToken, apiUrl));
@@ -151,48 +153,6 @@ public class AgentInstallController : ControllerBase
             return File(bytes, "application/gzip", "monitoring-agent.tar.gz");
         }
         finally { if (System.IO.File.Exists(tempFile)) System.IO.File.Delete(tempFile); }
-    }
-
-    private async Task<int> ArchiveStaleTokensAsync(Guid workspaceId, string? serverName, string reason, Guid? keepId = null)
-    {
-        var now = DateTime.UtcNow;
-        var query = _db.AgentInstallTokens.Where(t => t.WorkspaceId == workspaceId && t.ArchivedAt == null);
-        if (!string.IsNullOrWhiteSpace(serverName)) query = query.Where(t => t.ServerName == serverName);
-        var tokens = await query.OrderByDescending(t => t.CreatedAt).ToListAsync();
-        var archived = 0;
-        foreach (var group in tokens.GroupBy(t => t.ServerName))
-        {
-            var keep = keepId.HasValue ? group.FirstOrDefault(t => t.Id == keepId.Value) : group.FirstOrDefault(t => t.RevokedAt == null && t.UsedAt == null && t.ExpiresAt >= now);
-            keep ??= group.OrderByDescending(t => t.CreatedAt).FirstOrDefault();
-            foreach (var token in group)
-            {
-                if (token.Id == keep?.Id) continue;
-                if (token.UsedAt is null && token.RevokedAt is null && token.ExpiresAt >= now) continue;
-                token.ArchivedAt = now;
-                token.ArchiveReason = reason;
-                archived++;
-            }
-        }
-        return archived;
-    }
-
-    private async Task<int> ArchiveStaleServerDuplicatesAsync(Guid workspaceId, Guid keepId, string hostname, string? machineId, string reason)
-    {
-        var now = DateTime.UtcNow;
-        var staleBefore = DateTimeOffset.UtcNow.AddMinutes(-2);
-        var candidates = await _db.Servers
-            .Where(s => s.WorkspaceId == workspaceId && s.Id != keepId && s.ArchivedAt == null &&
-                ((!string.IsNullOrWhiteSpace(machineId) && s.MachineId == machineId) || s.Hostname == hostname))
-            .ToListAsync();
-        var archived = 0;
-        foreach (var server in candidates)
-        {
-            if (server.LastHeartbeatAt is not null && server.LastHeartbeatAt > staleBefore && server.Status == ServerStatus.Healthy) continue;
-            server.ArchivedAt = now;
-            server.ArchiveReason = reason;
-            archived++;
-        }
-        return archived;
     }
 
     private async Task<AgentInstallToken?> ValidateInstallTokenAsync(string token) { var installToken = await _db.AgentInstallTokens.FirstOrDefaultAsync(x => x.Token == token); return installToken is null || installToken.RevokedAt is not null || installToken.ExpiresAt < DateTime.UtcNow ? null : installToken; }

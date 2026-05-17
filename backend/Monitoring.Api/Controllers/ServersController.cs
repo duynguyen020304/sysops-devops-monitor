@@ -18,12 +18,14 @@ public class ServersController : ControllerBase
     private readonly IServerService _serverService;
     private readonly IDeployService _deployService;
     private readonly MonitoringDbContext _db;
+    private readonly IAgentCleanupService _cleanupService;
 
-    public ServersController(IServerService serverService, IDeployService deployService, MonitoringDbContext db)
+    public ServersController(IServerService serverService, IDeployService deployService, MonitoringDbContext db, IAgentCleanupService cleanupService)
     {
         _serverService = serverService;
         _deployService = deployService;
         _db = db;
+        _cleanupService = cleanupService;
     }
 
     [HttpPost("register")]
@@ -101,26 +103,7 @@ public class ServersController : ControllerBase
     public async Task<IActionResult> CleanupStaleServers()
     {
         var workspaceId = GetWorkspaceId();
-        var servers = await _db.Servers
-            .Where(s => s.WorkspaceId == workspaceId && s.ArchivedAt == null)
-            .OrderByDescending(s => s.LastHeartbeatAt ?? DateTimeOffset.MinValue)
-            .ThenByDescending(s => s.CreatedAt)
-            .ToListAsync();
-        var now = DateTime.UtcNow;
-        var staleBefore = DateTimeOffset.UtcNow.AddMinutes(-2);
-        var archived = 0;
-        foreach (var group in servers.GroupBy(s => !string.IsNullOrWhiteSpace(s.MachineId) ? $"m:{s.MachineId}" : $"h:{s.Hostname}"))
-        {
-            var keep = group.First();
-            foreach (var server in group.Skip(1))
-            {
-                if (server.LastHeartbeatAt is not null && server.LastHeartbeatAt > staleBefore && server.Status == Core.Enums.ServerStatus.Healthy) continue;
-                server.ArchivedAt = now;
-                server.ArchiveReason = "manual stale duplicate cleanup";
-                archived++;
-            }
-        }
-        await _db.SaveChangesAsync();
+        var archived = await _cleanupService.ArchiveStaleServerDuplicatesAsync(workspaceId, "manual stale duplicate cleanup", TimeSpan.FromMinutes(2));
         return Ok(new CleanupResponse(archived));
     }
 
