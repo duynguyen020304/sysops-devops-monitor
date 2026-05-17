@@ -20,30 +20,30 @@ namespace Monitoring.Infrastructure.Migrations
 
             migrationBuilder.Sql(@"
 WITH canonical AS (
-    SELECT "Id", "ServerId", "Name",
-           FIRST_VALUE("Id") OVER (PARTITION BY "ServerId", "Name" ORDER BY "UpdatedAt" DESC, "CreatedAt" DESC, "Id" DESC) AS "CanonicalId"
-    FROM "PM2Processes"
+    SELECT ""Id"", ""ServerId"", ""Name"",
+           FIRST_VALUE(""Id"") OVER (PARTITION BY ""ServerId"", ""Name"" ORDER BY ""UpdatedAt"" DESC, ""CreatedAt"" DESC, ""Id"" DESC) AS ""CanonicalId""
+    FROM ""PM2Processes""
 ), moved AS (
-    UPDATE "PM2Logs" l
-    SET "ProcessId" = c."CanonicalId"
+    UPDATE ""PM2Logs"" l
+    SET ""ProcessId"" = c.""CanonicalId""
     FROM canonical c
-    WHERE l."ProcessId" = c."Id" AND c."Id" <> c."CanonicalId"
+    WHERE l.""ProcessId"" = c.""Id"" AND c.""Id"" <> c.""CanonicalId""
 )
-DELETE FROM "PM2Processes" p
+DELETE FROM ""PM2Processes"" p
 USING canonical c
-WHERE p."Id" = c."Id" AND c."Id" <> c."CanonicalId";
+WHERE p.""Id"" = c.""Id"" AND c.""Id"" <> c.""CanonicalId"";
 ");
 
             migrationBuilder.Sql(@"
-UPDATE "PM2Logs"
-SET "Fingerprint" = md5("ServerId"::text || '|' || "ProcessId"::text || '|' || "StreamType"::text || '|' || "Timestamp"::text || '|' || "RawMessage")
-WHERE "Fingerprint" = '';
+UPDATE ""PM2Logs""
+SET ""Fingerprint"" = md5(""ServerId""::text || '|' || ""ProcessId""::text || '|' || ""StreamType""::text || '|' || ""Timestamp""::text || '|' || ""RawMessage"")
+WHERE ""Fingerprint"" = '';
 ");
 
             migrationBuilder.Sql(@"
-DELETE FROM "PM2Logs" a
-USING "PM2Logs" b
-WHERE a."Fingerprint" = b."Fingerprint" AND a."Id" > b."Id";
+DELETE FROM ""PM2Logs"" a
+USING ""PM2Logs"" b
+WHERE a.""Fingerprint"" = b.""Fingerprint"" AND a.""Id"" > b.""Id"";
 ");
 
             migrationBuilder.CreateIndex(
