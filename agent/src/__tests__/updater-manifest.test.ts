@@ -25,6 +25,14 @@ describe('updater manifest', () => {
     expect(verifyManifestSignature({ ...manifest, buildId: 'tampered' }, signature, publicKeyPem)).toBe(false)
   })
 
+  it('verifies ECDSA SHA-256 signatures', () => {
+    const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
+    const signature = sign('sha256', Buffer.from(canonicalizeManifest(manifest)), privateKey).toString('base64')
+    const publicKeyPem = publicKey.export({ format: 'pem', type: 'spki' }).toString()
+    expect(verifyManifestSignature(manifest, signature, publicKeyPem)).toBe(true)
+    expect(verifyManifestSignature({ ...manifest, buildId: 'tampered' }, signature, publicKeyPem)).toBe(false)
+  })
+
   it('rejects expired manifests', () => {
     expect(() => assertManifestUsable({ ...manifest, expiresAt: '2000-01-01T00:00:00.000Z' })).toThrow('Manifest expired')
   })

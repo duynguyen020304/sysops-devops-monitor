@@ -41,7 +41,16 @@ export function verifyManifestSignature(
   try {
     const data = Buffer.from(canonicalizeManifest(manifest))
     const signature = Buffer.from(signatureBase64, 'base64')
-    return verify(null, data, publicKeyPem, signature) || verify('sha256', data, publicKeyPem, signature)
+    if (verifyAlgorithm(null, data, publicKeyPem, signature)) return true
+    return verifyAlgorithm('sha256', data, publicKeyPem, signature)
+  } catch {
+    return false
+  }
+}
+
+function verifyAlgorithm(algorithm: string | null, data: Buffer, publicKeyPem: string, signature: Buffer): boolean {
+  try {
+    return verify(algorithm, data, publicKeyPem, signature)
   } catch {
     return false
   }
