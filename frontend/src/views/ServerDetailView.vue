@@ -24,16 +24,15 @@ const deployResult = ref<DeployAgentResponse | null>(null)
 onMounted(async () => {
   loading.value = true
   try {
-    const [serverRes, healthRes, metricsRes, processesRes] = await Promise.all([
+    const [serverRes, healthRes, processesRes] = await Promise.all([
       serversApi.getById(serverId),
       serversApi.getHealth(serverId),
-      serversApi.getMetrics(serverId),
       pm2Api.listByServer(serverId),
     ])
     server.value = serverRes.data
     health.value = healthRes.data
-    metrics.value = metricsRes.data
     processes.value = processesRes.data
+    await onTimeRangeChange('1h')
   } catch {
     // handled by UI
   } finally {
@@ -72,11 +71,13 @@ async function onTimeRangeChange(range: string) {
   }
 }
 
-const cpuData = computed(() => metrics.value.map((m) => m.cpuUsagePercent))
-const memData = computed(() => metrics.value.map((m) => m.memoryUsagePercent))
-const diskData = computed(() => metrics.value.map((m) => m.diskUsagePercent))
-const networkRxData = computed(() => metrics.value.map((m) => m.networkRxBytesPerSecond))
-const networkTxData = computed(() => metrics.value.map((m) => m.networkTxBytesPerSecond))
+const orderedMetrics = computed(() => [...metrics.value].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()))
+const latestMetric = computed(() => orderedMetrics.value.at(-1) ?? null)
+const cpuData = computed(() => orderedMetrics.value.map((m) => m.cpuUsagePercent))
+const memData = computed(() => orderedMetrics.value.map((m) => m.memoryUsagePercent))
+const diskData = computed(() => orderedMetrics.value.map((m) => m.diskUsagePercent))
+const networkRxData = computed(() => orderedMetrics.value.map((m) => m.networkRxBytesPerSecond))
+const networkTxData = computed(() => orderedMetrics.value.map((m) => m.networkTxBytesPerSecond))
 async function deployAgent() {
   deploying.value = true
   deployResult.value = null
@@ -90,10 +91,19 @@ async function deployAgent() {
   }
 }
 
-const loadData = computed(() => metrics.value.map((m) => m.loadAverage1m))
+const loadData = computed(() => orderedMetrics.value.map((m) => m.loadAverage1m))
 const metricLabels = computed(() =>
-  metrics.value.map((m) => new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+  orderedMetrics.value.map((m) => new Date(m.timestamp).toLocaleString([], timeRange.value === '7d'
+    ? { month: 'short', day: 'numeric', hour: '2-digit' }
+    : { hour: '2-digit', minute: '2-digit' })),
 )
+
+const pm2Totals = computed(() => ({
+  total: processes.value.length,
+  online: processes.value.filter((p) => p.status === 'Online' || p.status === 'online').length,
+  restarts: processes.value.reduce((sum, p) => sum + p.restartCount, 0),
+  memory: processes.value.reduce((sum, p) => sum + p.memoryUsage, 0),
+}))
 
 function statusColor(status: string): string {
   switch (status) {
@@ -205,6 +215,29 @@ function formatMemory(bytes: number): string {
         </details>
       </div>
 
+      <!-- Summary cards -->
+      <div class="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+          <p class="text-xs text-[var(--color-text-secondary)]">CPU</p>
+          <p class="mt-1 text-2xl font-bold text-[var(--color-text)]">{{ latestMetric ? `${latestMetric.cpuUsagePercent.toFixed(1)}%` : '—' }}</p>
+        </div>
+        <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+          <p class="text-xs text-[var(--color-text-secondary)]">Memory</p>
+          <p class="mt-1 text-2xl font-bold text-[var(--color-text)]">{{ latestMetric ? `${latestMetric.memoryUsagePercent.toFixed(1)}%` : '—' }}</p>
+          <p v-if="latestMetric" class="mt-1 text-xs text-[var(--color-text-secondary)]">{{ formatMemory(latestMetric.memoryUsedBytes) }} / {{ formatMemory(latestMetric.memoryTotalBytes) }}</p>
+        </div>
+        <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+          <p class="text-xs text-[var(--color-text-secondary)]">Disk</p>
+          <p class="mt-1 text-2xl font-bold text-[var(--color-text)]">{{ latestMetric ? `${latestMetric.diskUsagePercent.toFixed(1)}%` : '—' }}</p>
+          <p v-if="latestMetric" class="mt-1 text-xs text-[var(--color-text-secondary)]">{{ formatMemory(latestMetric.diskUsedBytes) }} / {{ formatMemory(latestMetric.diskTotalBytes) }}</p>
+        </div>
+        <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+          <p class="text-xs text-[var(--color-text-secondary)]">PM2 Apps</p>
+          <p class="mt-1 text-2xl font-bold text-[var(--color-text)]">{{ pm2Totals.online }}/{{ pm2Totals.total }}</p>
+          <p class="mt-1 text-xs text-[var(--color-text-secondary)]">{{ pm2Totals.restarts }} restarts · {{ formatMemory(pm2Totals.memory) }}</p>
+        </div>
+      </div>
+
       <!-- Tabs -->
       <div class="mb-6 flex gap-1 rounded-lg bg-[var(--color-bg-tertiary)] p-1">
         <button
@@ -229,7 +262,7 @@ function formatMemory(bytes: number): string {
           <span class="text-sm text-[var(--color-text-secondary)]">Time range:</span>
           <div class="flex gap-1">
             <button
-              v-for="range in ['1h', '6h', '24h', '7d']"
+              v-for="range in ['1h', '24h', '7d']"
               :key="range"
               @click="onTimeRangeChange(range)"
               :class="[
@@ -299,6 +332,24 @@ function formatMemory(bytes: number): string {
 
       <!-- PM2 Tab -->
       <div v-else-if="activeTab === 'pm2'">
+        <div class="mb-4 grid gap-4 sm:grid-cols-4">
+          <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+            <p class="text-xs text-[var(--color-text-secondary)]">Total apps</p>
+            <p class="mt-1 text-xl font-bold text-[var(--color-text)]">{{ pm2Totals.total }}</p>
+          </div>
+          <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+            <p class="text-xs text-[var(--color-text-secondary)]">Online</p>
+            <p class="mt-1 text-xl font-bold text-green-400">{{ pm2Totals.online }}</p>
+          </div>
+          <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+            <p class="text-xs text-[var(--color-text-secondary)]">Restarts</p>
+            <p class="mt-1 text-xl font-bold text-[var(--color-text)]">{{ pm2Totals.restarts }}</p>
+          </div>
+          <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+            <p class="text-xs text-[var(--color-text-secondary)]">Memory</p>
+            <p class="mt-1 text-xl font-bold text-[var(--color-text)]">{{ formatMemory(pm2Totals.memory) }}</p>
+          </div>
+        </div>
         <div v-if="processes.length === 0" class="rounded-xl border border-dashed border-[var(--color-border)] py-12 text-center text-sm text-[var(--color-text-secondary)]">
           No PM2 processes found on this server.
         </div>

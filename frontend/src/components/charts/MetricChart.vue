@@ -78,7 +78,7 @@ function formatValue(val: number): string {
   return `${val.toFixed(1)}${props.unit}`
 }
 
-const timeRanges = ['1h', '6h', '24h']
+const timeRanges = ['1h', '24h', '7d']
 </script>
 
 <template>
