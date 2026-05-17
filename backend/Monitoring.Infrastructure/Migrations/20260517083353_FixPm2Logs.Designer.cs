@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Monitoring.Infrastructure.Migrations
 {
     [DbContext(typeof(MonitoringDbContext))]
-    [Migration("20260517074547_FixPm2Logs")]
+    [Migration("20260517083353_FixPm2Logs")]
     partial class FixPm2Logs
     {
         /// <inheritdoc />

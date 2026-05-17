@@ -2,16 +2,20 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Monitoring.Api.Filters;
 using Monitoring.Core.DTOs;
+using Monitoring.Core.Entities;
+using Monitoring.Core.Enums;
 using Monitoring.Core.Interfaces;
-using System.Security.Claims;
 
 namespace Monitoring.Api.Controllers;
 
 [ApiController]
-[Route("api")]
+[Route("api/pm2")]
 [Authorize]
+[RequirePermission("view_pm2_logs")]
 public class PM2Controller : ControllerBase
 {
+    private const int MaxLogLimit = 1000;
+
     private readonly IPM2Service _pm2Service;
     private readonly IServerService _serverService;
 
@@ -21,56 +25,63 @@ public class PM2Controller : ControllerBase
         _serverService = serverService;
     }
 
-    [HttpGet("servers/{id:guid}/pm2")]
-    [RequirePermission("view_pm2_logs")]
-    public async Task<ActionResult<List<PM2ProcessDetailDto>>> GetProcesses(Guid id)
+    // Backward-compatible endpoint used by frontend: /api/servers/{serverId}/pm2
+    [HttpGet("~/api/servers/{serverId:guid}/pm2")]
+    public async Task<ActionResult<List<PM2ProcessDetailDto>>> GetProcessesByServer(Guid serverId)
     {
-        var server = await _serverService.GetServerAsync(id);
-        if (server is null)
-            return NotFound();
+        var server = await GetServerInWorkspaceAsync(serverId);
+        if (server is null) return NotFound();
 
-        var workspaceId = GetWorkspaceId();
-        if (server.WorkspaceId != workspaceId)
-            return Forbid();
-
-        var processes = await _pm2Service.GetProcessesByServerAsync(id);
-
-        var dtos = processes.Select(p => new PM2ProcessDetailDto(
-            Id: p.Id,
-            Pm2Id: p.Pm2Id,
-            Name: p.Name,
-            Pid: p.Pid,
-            Status: p.Status.ToString(),
-            UptimeSeconds: p.UptimeSeconds,
-            RestartCount: p.RestartCount,
-            CpuUsage: p.CpuUsage,
-            MemoryUsage: p.MemoryUsage,
-            ExecutionMode: p.ExecutionMode,
-            NodeVersion: p.NodeVersion,
-            CreatedAt: p.CreatedAt
-        )).ToList();
-
-        return Ok(dtos);
+        var processes = await _pm2Service.GetProcessesByServerAsync(serverId);
+        return Ok(processes.Select(MapProcess).ToList());
     }
 
-    [HttpGet("pm2/{processId:guid}")]
-    [RequirePermission("view_pm2_logs")]
+    [HttpGet("{processId:guid}")]
     public async Task<ActionResult<PM2ProcessDetailDto>> GetProcess(Guid processId)
     {
         var process = await _pm2Service.GetProcessAsync(processId);
-        if (process is null)
-            return NotFound();
+        if (process is null) return NotFound();
 
-        // Verify the server belongs to the user's workspace
-        var server = await _serverService.GetServerAsync(process.ServerId);
-        if (server is null)
-            return NotFound();
+        var server = await GetServerInWorkspaceAsync(process.ServerId);
+        if (server is null) return NotFound();
 
-        var workspaceId = GetWorkspaceId();
-        if (server.WorkspaceId != workspaceId)
-            return Forbid();
+        return Ok(MapProcess(process));
+    }
 
-        var dto = new PM2ProcessDetailDto(
+    [HttpGet("{processId:guid}/logs")]
+    public async Task<ActionResult<List<PM2LogDto>>> GetProcessLogs(
+        Guid processId,
+        [FromQuery] int limit = 100)
+    {
+        var process = await _pm2Service.GetProcessAsync(processId);
+        if (process is null) return NotFound();
+
+        var server = await GetServerInWorkspaceAsync(process.ServerId);
+        if (server is null) return NotFound();
+
+        var safeLimit = Math.Clamp(limit, 1, MaxLogLimit);
+        var logs = await _pm2Service.GetProcessLogsAsync(processId, safeLimit);
+        return Ok(logs.Select(MapLog).ToList());
+    }
+
+    private async Task<Server?> GetServerInWorkspaceAsync(Guid serverId)
+    {
+        var server = await _serverService.GetServerAsync(serverId);
+        if (server is null) return null;
+
+        return server.WorkspaceId == GetWorkspaceId() ? server : null;
+    }
+
+    private Guid GetWorkspaceId()
+    {
+        var claim = User.FindFirst("WorkspaceId")?.Value
+            ?? throw new UnauthorizedAccessException("WorkspaceId claim not found.");
+        return Guid.Parse(claim);
+    }
+
+    private static PM2ProcessDetailDto MapProcess(PM2Process process)
+    {
+        return new PM2ProcessDetailDto(
             Id: process.Id,
             Pm2Id: process.Pm2Id,
             Name: process.Name,
@@ -84,46 +95,16 @@ public class PM2Controller : ControllerBase
             NodeVersion: process.NodeVersion,
             CreatedAt: process.CreatedAt
         );
-
-        return Ok(dto);
     }
 
-    [HttpGet("pm2/{processId:guid}/logs")]
-    [RequirePermission("view_pm2_logs")]
-    public async Task<ActionResult<List<PM2LogDto>>> GetProcessLogs(
-        Guid processId,
-        [FromQuery] int limit = 100)
+    private static PM2LogDto MapLog(PM2Log log)
     {
-        var process = await _pm2Service.GetProcessAsync(processId);
-        if (process is null)
-            return NotFound();
-
-        // Verify the server belongs to the user's workspace
-        var server = await _serverService.GetServerAsync(process.ServerId);
-        if (server is null)
-            return NotFound();
-
-        var workspaceId = GetWorkspaceId();
-        if (server.WorkspaceId != workspaceId)
-            return Forbid();
-
-        var logs = await _pm2Service.GetProcessLogsAsync(processId, limit);
-
-        var dtos = logs.Select(l => new PM2LogDto(
-            Id: l.Id,
-            StreamType: l.StreamType == Monitoring.Core.Enums.LogStreamType.StdErr ? "stderr" : "stdout",
-            Timestamp: l.Timestamp,
-            Level: l.Level,
-            Message: l.Message
-        )).ToList();
-
-        return Ok(dtos);
-    }
-
-    private Guid GetWorkspaceId()
-    {
-        var claim = User.FindFirst("WorkspaceId")?.Value
-            ?? throw new UnauthorizedAccessException("WorkspaceId claim not found.");
-        return Guid.Parse(claim);
+        return new PM2LogDto(
+            Id: log.Id,
+            StreamType: log.StreamType == LogStreamType.StdErr ? "stderr" : "stdout",
+            Timestamp: log.Timestamp,
+            Level: log.Level,
+            Message: log.Message
+        );
     }
 }
