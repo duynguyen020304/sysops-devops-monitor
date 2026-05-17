@@ -301,6 +301,7 @@ AGENT_UPDATE_HELPER_PATH=$INSTALL_DIR/current/dist/bin/agent-updater.js
 AGENT_CURRENT_LINK=$INSTALL_DIR/current
 ENVEOF
     chmod 600 "$INSTALL_DIR/.env"
+    ln -sfn "$INSTALL_DIR/.env" "$INSTALL_DIR/current/.env"
     ok "Configuration written to $INSTALL_DIR/.env"
 else
     echo -e "${YELLOW}[DRY]${NC}  Write .env with AGENT_API_URL=$AGENT_API_URL"
