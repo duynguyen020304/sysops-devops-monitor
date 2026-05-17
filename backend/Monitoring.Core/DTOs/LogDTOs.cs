@@ -18,5 +18,6 @@ public record LogEntryDto(
     string? SourceName,
     DateTimeOffset Timestamp,
     string Level,
-    string Message
+    string Message,
+    Guid? SourceId = null
 );

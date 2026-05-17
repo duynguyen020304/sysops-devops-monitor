@@ -44,6 +44,12 @@ const navItems = [
     permission: 'view_pm2_logs' as const,
   },
   {
+    name: 'Systemd Services',
+    path: '/systemd',
+    icon: 'M8 9l3 3-3 3m5 0h3M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z',
+    permission: 'view_pm2_logs' as const,
+  },
+  {
     name: 'Logs',
     path: '/logs',
     icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',

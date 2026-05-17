@@ -46,6 +46,7 @@ function onTimeRange(range: string) {
 function sourceBadgeClass(sourceType: string): string {
   if (sourceType === 'workflow') return 'bg-blue-500/20 text-blue-400'
   if (sourceType === 'pm2') return 'bg-purple-500/20 text-purple-400'
+  if (sourceType === 'systemd') return 'bg-orange-500/20 text-orange-400'
   return 'bg-gray-500/20 text-gray-400'
 }
 
@@ -71,11 +72,13 @@ function formatTimestamp(ts: string): string {
   }
 }
 
-function handleLogClick(entry: { sourceType: string; sourceName: string | null }) {
+function handleLogClick(entry: { sourceType: string; sourceName: string | null; sourceId?: string | null }) {
   if (entry.sourceType === 'workflow' && entry.sourceName) {
     router.push(`/repositories/${entry.sourceName}`)
-  } else if (entry.sourceType === 'pm2' && entry.sourceName) {
-    router.push(`/pm2/${entry.sourceName}`)
+  } else if (entry.sourceType === 'pm2' && entry.sourceId) {
+    router.push(`/pm2/${entry.sourceId}`)
+  } else if (entry.sourceType === 'systemd' && entry.sourceId) {
+    router.push(`/systemd/${entry.sourceId}`)
   }
 }
 </script>
@@ -85,7 +88,7 @@ function handleLogClick(entry: { sourceType: string; sourceName: string | null }
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h2 class="text-xl font-bold text-[var(--color-text)]">Logs</h2>
-        <p class="mt-1 text-sm text-[var(--color-text-secondary)]">Search across workflow and PM2 logs</p>
+        <p class="mt-1 text-sm text-[var(--color-text-secondary)]">Search across workflow, PM2, and systemd logs</p>
       </div>
       <span class="text-sm text-[var(--color-text-secondary)]">
         {{ logs.total.toLocaleString() }} results

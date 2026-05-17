@@ -12,6 +12,8 @@ import type {
   ServerMetric,
   PM2Process,
   PM2Log,
+  SystemdService,
+  SystemdLog,
   LogSearchRequest,
   LogSearchResult,
   ServerMetricsSummary,
@@ -112,6 +114,14 @@ export const pm2Api = {
   getById: (processId: string) => api.get<PM2Process>(`/pm2/${processId}`),
   getLogs: (processId: string, limit = 100) =>
     api.get<PM2Log[]>(`/pm2/${processId}/logs`, { params: { limit } }),
+}
+
+export const systemdApi = {
+  listByServer: (serverId: string, params?: { search?: string; state?: string; page?: number; pageSize?: number }) =>
+    api.get<SystemdService[]>(`/servers/${serverId}/systemd`, { params }),
+  getById: (serviceId: string) => api.get<SystemdService>(`/systemd/${serviceId}`),
+  getLogs: (serviceId: string, params?: { limit?: number; level?: string; from?: string; to?: string }) =>
+    api.get<SystemdLog[]>(`/systemd/${serviceId}/logs`, { params }),
 }
 
 export const logsApi = {

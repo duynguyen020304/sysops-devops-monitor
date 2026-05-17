@@ -177,6 +177,33 @@ export interface PM2Log {
   message: string
 }
 
+export interface SystemdService {
+  id: string
+  serverId: string
+  name: string
+  displayName: string | null
+  loadState: string
+  activeState: string
+  subState: string
+  description: string | null
+  fragmentPath: string | null
+  mainPid: number | null
+  memoryCurrent: number | null
+  cpuUsageNSec: number | null
+  restartCount: number | null
+  updatedAt: string
+}
+
+export interface SystemdLog {
+  id: string
+  timestamp: string
+  priority: number | null
+  level: string
+  message: string
+  cursor: string | null
+  bootId: string | null
+}
+
 export interface ServerMetric {
   timestamp: string
   cpuUsagePercent: number
@@ -282,6 +309,7 @@ export interface LogEntry {
   timestamp: string
   level: string
   message: string
+  sourceId?: string | null
 }
 
 export interface LogSearchRequest {

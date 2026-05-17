@@ -4,6 +4,7 @@ import { collectMemory } from './collectors/memory.js'
 import { collectDisk } from './collectors/disk.js'
 import { collectNetwork } from './collectors/network.js'
 import { collectPM2Processes, collectPM2Logs } from './collectors/pm2.js'
+import { collectSystemdServices, collectSystemdLogs } from './collectors/systemd.js'
 import { HttpReporter } from './reporters/http.js'
 
 const reporter = new HttpReporter()
@@ -29,6 +30,14 @@ async function collectAndReport(): Promise<void> {
       if (logs.length > 0) {
         await reporter.sendLogs(logs)
       }
+    }
+
+    if (config.systemdEnabled) {
+      const systemdServices = await collectSystemdServices(config.systemdUnits)
+      await reporter.sendSystemdServices(systemdServices)
+      const units = config.systemdUnits.length > 0 ? config.systemdUnits : systemdServices.map((s) => s.name)
+      const systemdLogs = await collectSystemdLogs(units, config.systemdLogBatchSize)
+      await reporter.sendSystemdLogs(systemdLogs)
     }
 
     console.log('Metrics collected and sent')

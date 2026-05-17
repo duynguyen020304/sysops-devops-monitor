@@ -7,6 +7,7 @@ import type { MemoryMetrics } from '../collectors/memory.js'
 import type { DiskMetrics } from '../collectors/disk.js'
 import type { NetworkMetrics } from '../collectors/network.js'
 import type { PM2ProcessInfo, PM2LogEntry } from '../collectors/pm2.js'
+import type { SystemdServiceInfo, SystemdLogEntry } from '../collectors/systemd.js'
 
 export interface SystemMetrics {
   cpu: CpuMetrics
@@ -23,7 +24,7 @@ export interface LogEntry {
 }
 
 interface BufferedData {
-  type: 'metrics' | 'pm2' | 'logs' | 'heartbeat'
+  type: 'metrics' | 'pm2' | 'logs' | 'heartbeat' | 'systemd' | 'systemdLogs'
   payload: unknown
   timestamp: string
 }
@@ -126,6 +127,12 @@ export class HttpReporter {
         case 'logs':
           path = '/api/agent/logs'
           break
+        case 'systemd':
+          path = '/api/agent/systemd'
+          break
+        case 'systemdLogs':
+          path = '/api/agent/systemd/logs'
+          break
         case 'heartbeat':
           path = '/api/agent/heartbeat'
           break
@@ -221,6 +228,20 @@ export class HttpReporter {
         timestamp: new Date().toISOString(),
       })
     }
+  }
+
+  async sendSystemdServices(services: SystemdServiceInfo[]): Promise<void> {
+    if (services.length === 0) return
+    const payload = { serverId: config.serverId, collectedAt: new Date().toISOString(), services }
+    const success = await this.requestWithRetry('post', '/api/agent/systemd', payload)
+    if (!success) await this.bufferData({ type: 'systemd', payload, timestamp: new Date().toISOString() })
+  }
+
+  async sendSystemdLogs(logs: SystemdLogEntry[]): Promise<void> {
+    if (logs.length === 0) return
+    const payload = { serverId: config.serverId, logs }
+    const success = await this.requestWithRetry('post', '/api/agent/systemd/logs', payload)
+    if (!success) await this.bufferData({ type: 'systemdLogs', payload, timestamp: new Date().toISOString() })
   }
 
   async sendLogs(logs: LogEntry[]): Promise<void> {

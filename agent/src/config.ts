@@ -21,4 +21,7 @@ export const config = {
   heartbeatIntervalMs: parseInt(process.env.HEARTBEAT_INTERVAL_MS || '60000', 10), // 60s
   logBatchSize: parseInt(process.env.LOG_BATCH_SIZE || '100', 10),
   maxBufferSize: parseInt(process.env.MAX_BUFFER_SIZE || '1000', 10),
+  systemdEnabled: (process.env.SYSTEMD_ENABLED || 'false').toLowerCase() === 'true',
+  systemdUnits: (process.env.SYSTEMD_UNITS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  systemdLogBatchSize: parseInt(process.env.SYSTEMD_LOG_BATCH_SIZE || process.env.LOG_BATCH_SIZE || '100', 10),
 }

@@ -20,6 +20,8 @@ public class MonitoringDbContext : DbContext
     public DbSet<AgentInstallToken> AgentInstallTokens => Set<AgentInstallToken>();
     public DbSet<PM2Process> PM2Processes => Set<PM2Process>();
     public DbSet<PM2Log> PM2Logs => Set<PM2Log>();
+    public DbSet<SystemdService> SystemdServices => Set<SystemdService>();
+    public DbSet<SystemdLog> SystemdLogs => Set<SystemdLog>();
     public DbSet<ServerMetric> ServerMetrics => Set<ServerMetric>();
     public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<AlertRule> AlertRules => Set<AlertRule>();
@@ -187,6 +189,44 @@ public class MonitoringDbContext : DbContext
             e.HasIndex(x => x.ServerId);
             e.HasIndex(x => x.ProcessId);
             e.HasIndex(x => x.Fingerprint).IsUnique();
+        });
+
+        // SystemdService
+        modelBuilder.Entity<SystemdService>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).IsRequired().HasMaxLength(256);
+            e.Property(x => x.DisplayName).HasMaxLength(256);
+            e.Property(x => x.LoadState).IsRequired().HasMaxLength(64);
+            e.Property(x => x.ActiveState).IsRequired().HasMaxLength(64);
+            e.Property(x => x.SubState).IsRequired().HasMaxLength(64);
+            e.Property(x => x.Description).HasMaxLength(512);
+            e.Property(x => x.FragmentPath).HasMaxLength(512);
+            e.HasIndex(x => new { x.ServerId, x.Name }).IsUnique();
+            e.HasOne(x => x.Server)
+                .WithMany()
+                .HasForeignKey(x => x.ServerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SystemdLog
+        modelBuilder.Entity<SystemdLog>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Level).IsRequired().HasMaxLength(32);
+            e.Property(x => x.Message).IsRequired();
+            e.Property(x => x.RawJson).IsRequired();
+            e.Property(x => x.Cursor).HasMaxLength(256);
+            e.Property(x => x.BootId).HasMaxLength(128);
+            e.Property(x => x.Fingerprint).IsRequired().HasMaxLength(128);
+            e.HasIndex(x => new { x.ServerId, x.Timestamp });
+            e.HasIndex(x => new { x.ServiceId, x.Timestamp });
+            e.HasIndex(x => x.Fingerprint).IsUnique();
+            e.HasIndex(x => x.Cursor);
+            e.HasOne(x => x.Service)
+                .WithMany(x => x.Logs)
+                .HasForeignKey(x => x.ServiceId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ServerMetric

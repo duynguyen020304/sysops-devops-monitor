@@ -37,6 +37,13 @@ public class LogService : ILogService
             items.AddRange(pm2Logs);
         }
 
+        if (string.IsNullOrEmpty(request.SourceType) ||
+            request.SourceType.Equals("systemd", StringComparison.OrdinalIgnoreCase))
+        {
+            var systemdLogs = await SearchSystemdLogsAsync(workspaceId, request);
+            items.AddRange(systemdLogs);
+        }
+
         // Sort combined results by timestamp descending
         items = items
             .OrderByDescending(i => i.Timestamp)
@@ -114,14 +121,51 @@ public class LogService : ILogService
         return results;
     }
 
+    private async Task<List<LogEntryDto>> SearchSystemdLogsAsync(Guid workspaceId, LogSearchRequest request)
+    {
+        var query = from log in _db.SystemdLogs
+                    join svc in _db.SystemdServices on log.ServiceId equals svc.Id
+                    join server in _db.Servers on log.ServerId equals server.Id
+                    where server.WorkspaceId == workspaceId
+                    select new { log, svc };
+
+        if (!string.IsNullOrEmpty(request.Keyword))
+        {
+            var keyword = request.Keyword;
+            query = query.Where(x => x.log.Message.Contains(keyword));
+        }
+
+        if (request.From.HasValue) query = query.Where(x => x.log.Timestamp >= request.From.Value);
+        if (request.To.HasValue) query = query.Where(x => x.log.Timestamp <= request.To.Value);
+        if (!string.IsNullOrEmpty(request.Severity))
+        {
+            var severity = request.Severity;
+            query = query.Where(x => x.log.Level == severity);
+        }
+
+        return await query
+            .OrderByDescending(x => x.log.Timestamp)
+            .Select(x => new LogEntryDto(
+                x.log.Id,
+                "systemd",
+                x.svc.Name,
+                x.log.Timestamp,
+                x.log.Level,
+                _logMaskingService.MaskSensitiveData(x.log.Message),
+                x.svc.Id
+            ))
+            .ToListAsync();
+    }
+
     private async Task<List<LogEntryDto>> SearchPM2LogsAsync(
         Guid workspaceId, LogSearchRequest request)
     {
         // Join through Server to filter by workspace
         var query = from log in _db.PM2Logs
                     join server in _db.Servers on log.ServerId equals server.Id
+                    join proc in _db.PM2Processes on log.ProcessId equals proc.Id
                     where server.WorkspaceId == workspaceId
-                    select new { log, server };
+                    select new { log, server, proc };
 
         if (!string.IsNullOrEmpty(request.Keyword))
         {
@@ -146,10 +190,11 @@ public class LogService : ILogService
             .Select(x => new LogEntryDto(
                 x.log.Id,
                 "pm2",
-                x.server.Hostname,
+                x.proc.Name,
                 x.log.Timestamp,
                 x.log.Level,
-                _logMaskingService.MaskSensitiveData(x.log.Message)
+                _logMaskingService.MaskSensitiveData(x.log.Message),
+                x.proc.Id
             ))
             .ToListAsync();
 

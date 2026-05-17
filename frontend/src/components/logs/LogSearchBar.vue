@@ -37,6 +37,7 @@ watch(
 const sourceTypes = [
   { label: 'All Sources', value: '' },
   { label: 'Workflows', value: 'workflow' },
+  { label: 'Systemd', value: 'systemd' },
   { label: 'PM2', value: 'pm2' },
 ]
 

@@ -82,6 +82,69 @@ public class AgentController : ControllerBase
         }
     }
 
+    [HttpPost("systemd")]
+    public async Task<IActionResult> SubmitSystemd([FromBody] AgentSystemdRequest request)
+    {
+        if (!await ValidateAgentTokenAsync()) return Unauthorized(new { message = "Invalid agent token." });
+        if (await _serverService.GetServerAsync(request.ServerId) is null) return NotFound(new { message = "Server not found." });
+
+        var now = DateTime.UtcNow;
+        var existing = await _db.SystemdServices.Where(s => s.ServerId == request.ServerId).ToDictionaryAsync(s => s.Name);
+        foreach (var dto in request.Services.Where(s => !string.IsNullOrWhiteSpace(s.Name)))
+        {
+            if (!existing.TryGetValue(dto.Name, out var svc))
+            {
+                svc = new SystemdService { Id = Guid.NewGuid(), ServerId = request.ServerId, Name = dto.Name, LoadState = dto.LoadState, ActiveState = dto.ActiveState, SubState = dto.SubState, CreatedAt = now, UpdatedAt = now };
+                _db.SystemdServices.Add(svc);
+            }
+            svc.DisplayName = dto.DisplayName;
+            svc.LoadState = dto.LoadState;
+            svc.ActiveState = dto.ActiveState;
+            svc.SubState = dto.SubState;
+            svc.Description = dto.Description;
+            svc.FragmentPath = dto.FragmentPath;
+            svc.MainPid = dto.MainPid;
+            svc.MemoryCurrent = dto.MemoryCurrent;
+            svc.CpuUsageNSec = dto.CpuUsageNSec;
+            svc.RestartCount = dto.RestartCount;
+            svc.UpdatedAt = now;
+        }
+        await _db.SaveChangesAsync();
+        return Ok(new { received = request.Services.Count });
+    }
+
+    [HttpPost("systemd/logs")]
+    public async Task<IActionResult> SubmitSystemdLogs([FromBody] AgentSystemdLogsRequest request)
+    {
+        if (!await ValidateAgentTokenAsync()) return Unauthorized(new { message = "Invalid agent token." });
+        if (await _serverService.GetServerAsync(request.ServerId) is null) return NotFound(new { message = "Server not found." });
+
+        var services = await _db.SystemdServices.Where(s => s.ServerId == request.ServerId).ToDictionaryAsync(s => s.Name, s => s.Id);
+        var candidates = new List<SystemdLog>();
+        var droppedNoService = 0;
+        var now = DateTime.UtcNow;
+        foreach (var entry in request.Logs)
+        {
+            if (!services.TryGetValue(entry.UnitName, out var serviceId)) { droppedNoService++; continue; }
+            var ts = entry.Timestamp ?? DateTimeOffset.UtcNow;
+            candidates.Add(new SystemdLog
+            {
+                Id = Guid.NewGuid(), ServerId = request.ServerId, ServiceId = serviceId, Timestamp = ts,
+                Priority = entry.Priority, Level = entry.Level ?? MapPriority(entry.Priority), Message = entry.Message,
+                RawJson = entry.RawJson ?? entry.Message, Cursor = entry.Cursor, BootId = entry.BootId,
+                Fingerprint = CreateSystemdFingerprint(request.ServerId, serviceId, entry.Cursor, ts, entry.Message), CreatedAt = now
+            });
+        }
+        var fps = candidates.Select(l => l.Fingerprint).Distinct().ToList();
+        var existingFps = await _db.SystemdLogs.Where(l => fps.Contains(l.Fingerprint)).Select(l => l.Fingerprint).ToListAsync();
+        var existingSet = existingFps.ToHashSet(StringComparer.Ordinal);
+        var inserted = 0;
+        foreach (var log in candidates.GroupBy(l => l.Fingerprint).Select(g => g.First()))
+            if (existingSet.Add(log.Fingerprint)) { _db.SystemdLogs.Add(log); inserted++; }
+        await _db.SaveChangesAsync();
+        return Ok(new { received = request.Logs.Count, inserted, duplicates = request.Logs.Count - inserted - droppedNoService, droppedNoService });
+    }
+
     [HttpPost("logs")]
     public async Task<IActionResult> SubmitLogs([FromBody] AgentLogsRequest request)
     {
@@ -170,6 +233,20 @@ public class AgentController : ControllerBase
         var raw = $"{serverId}|{processId}|{streamType}|{timestamp.ToUniversalTime():O}|{message}";
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
     }
+
+    private static string CreateSystemdFingerprint(Guid serverId, Guid serviceId, string? cursor, DateTimeOffset timestamp, string message)
+    {
+        var raw = $"{serverId}|{serviceId}|{cursor}|{timestamp.ToUniversalTime():O}|{message}";
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
+    }
+
+    private static string MapPriority(int? priority) => priority switch
+    {
+        0 or 1 or 2 or 3 => "error",
+        4 => "warn",
+        7 => "debug",
+        _ => "info"
+    };
 
     private async Task<bool> ValidateAgentTokenAsync()
     {
