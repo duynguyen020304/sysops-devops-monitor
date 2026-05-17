@@ -73,8 +73,24 @@ jobs:
           path: backend/publish
           retention-days: 1
 
-      # Monitoring agent intentionally not built/deployed by CI.
-      # Agents must be installed only via generated install.sh links.
+      # Build/upload agent files for installer downloads only.
+      # CI must not install, start, stop, or delete the monitoring-agent PM2 process.
+      - name: Install & Build Agent Installer Files
+        run: |
+          cd agent
+          pnpm install
+          pnpm run build
+
+      - name: Upload Agent Installer Files Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-installer-files
+          path: |
+            agent/dist
+            agent/package.json
+            agent/pnpm-lock.yaml
+            agent/install.sh
+          retention-days: 1
 
   # ==========================================
   # Deploy Job - Download Artifacts & Deploy
@@ -109,6 +125,12 @@ jobs:
         with:
           name: backend-publish
           path: backend/publish
+
+      - name: Download Agent Installer Files
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-installer-files
+          path: agent
 
       # ------------------------------------------
       # Resolve SSH transport & prepare client tools
@@ -279,6 +301,16 @@ jobs:
           rsync -avzr --delete -e "ssh -F $SSH_CONFIG_FILE" backend/publish/ monitoring-deploy:/tmp/monitoring-backend-deploy
 
       # ------------------------------------------
+      # Upload Agent Installer Files (not PM2 deploy)
+      # ------------------------------------------
+      - name: Upload Agent Installer Files to Server
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH_CONFIG_FILE="$HOME/.ssh/config"
+          rsync -avzr --delete -e "ssh -F $SSH_CONFIG_FILE" agent/ monitoring-deploy:/tmp/monitoring-agent-installer-files
+
+      # ------------------------------------------
       # Finalize Deployment & Restart Services
       # ------------------------------------------
       - name: Finalize Deployment via SSH
@@ -335,6 +367,7 @@ jobs:
           echo "Ensuring deployment directories exist..."
           mkdir -p /root/Monitoring/frontend
           mkdir -p /root/Monitoring/backend
+          mkdir -p /root/Monitoring/agent
 
           # ==========================================
           # 3. Create Backend Runtime Environment
@@ -400,6 +433,19 @@ jobs:
           ASPNETCORE_ENVIRONMENT=Production $DOTNET_PATH Monitoring.Api.dll
           EOF
           chmod +x /root/Monitoring/backend/start.sh
+
+          # ==========================================
+          # 8. Refresh Agent Installer Files
+          # ==========================================
+          echo "Refreshing agent installer files..."
+          rm -rf /root/Monitoring/agent/dist
+          cp -r /tmp/monitoring-agent-installer-files/dist /root/Monitoring/agent/dist
+          cp /tmp/monitoring-agent-installer-files/package.json /root/Monitoring/agent/package.json
+          if [ -f /tmp/monitoring-agent-installer-files/pnpm-lock.yaml ]; then
+            cp /tmp/monitoring-agent-installer-files/pnpm-lock.yaml /root/Monitoring/agent/pnpm-lock.yaml
+          fi
+          cp /tmp/monitoring-agent-installer-files/install.sh /root/Monitoring/agent/install.sh
+          rm -rf /tmp/monitoring-agent-installer-files
 
           # Monitoring agent is not managed by CI.
           # Install/update agents only via generated install.sh links.
