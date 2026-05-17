@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').mkdirSync('dist/bin',{recursive:true});require('fs').copyFileSync('dist/bin-agent-updater.js','dist/bin/agent-updater.js')\"",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "test": "vitest run",

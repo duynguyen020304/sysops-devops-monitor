@@ -162,12 +162,23 @@ export class HttpReporter {
     const success = await this.requestWithRetry('post', '/api/agent/heartbeat', {
       serverId,
       timestamp: new Date().toISOString(),
+      agentVersion: process.env.AGENT_VERSION || '1.0.0',
+      agentBuildId: process.env.AGENT_BUILD_ID || 'dev',
+      agentCapabilities: { updaterProtocol: 1 },
+      agentUpdateState: config.updateEnabled ? 'Idle' : 'Disabled',
     })
 
     if (!success) {
       await this.bufferData({
         type: 'heartbeat',
-        payload: { serverId, timestamp: new Date().toISOString() },
+        payload: {
+          serverId,
+          timestamp: new Date().toISOString(),
+          agentVersion: process.env.AGENT_VERSION || '1.0.0',
+          agentBuildId: process.env.AGENT_BUILD_ID || 'dev',
+          agentCapabilities: { updaterProtocol: 1 },
+          agentUpdateState: config.updateEnabled ? 'Idle' : 'Disabled',
+        },
         timestamp: new Date().toISOString(),
       })
     } else {

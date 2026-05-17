@@ -24,4 +24,10 @@ export const config = {
   systemdEnabled: (process.env.SYSTEMD_ENABLED || 'false').toLowerCase() === 'true',
   systemdUnits: (process.env.SYSTEMD_UNITS || '').split(',').map((s) => s.trim()).filter(Boolean),
   systemdLogBatchSize: parseInt(process.env.SYSTEMD_LOG_BATCH_SIZE || process.env.LOG_BATCH_SIZE || '100', 10),
+  updateEnabled: (process.env.AGENT_UPDATE_ENABLED || 'false').toLowerCase() === 'true',
+  updateIntervalMs: parseInt(process.env.AGENT_UPDATE_INTERVAL_MS || '300000', 10),
+  updateStateDir: process.env.AGENT_UPDATE_STATE_DIR || join(process.cwd(), 'agent-data', 'updates'),
+  updateReleasesDir: process.env.AGENT_RELEASES_DIR || '/opt/monitoring-agent/releases',
+  updateTrustDir: process.env.AGENT_UPDATE_TRUST_DIR || '/etc/monitoring-agent/trusted-keys',
+  updateHelperPath: process.env.AGENT_UPDATE_HELPER_PATH || join(process.cwd(), 'dist', 'bin', 'agent-updater.js'),
 }

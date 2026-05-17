@@ -6,10 +6,15 @@ import { collectNetwork } from './collectors/network.js'
 import { collectPM2Processes, collectPM2Logs } from './collectors/pm2.js'
 import { collectSystemdServices, collectSystemdLogs } from './collectors/systemd.js'
 import { HttpReporter } from './reporters/http.js'
+import { AgentUpdater } from './updater/runner.js'
 
 const reporter = new HttpReporter()
+const updater = new AgentUpdater()
+const intervals: NodeJS.Timeout[] = []
+let shuttingDown = false
 
 async function collectAndReport(): Promise<void> {
+  if (shuttingDown) return
   try {
     console.log('Collecting metrics...')
 
@@ -47,6 +52,7 @@ async function collectAndReport(): Promise<void> {
 }
 
 async function sendHeartbeat(): Promise<void> {
+  if (shuttingDown) return
   try {
     await reporter.sendHeartbeat(config.serverId)
   } catch (error) {
@@ -73,21 +79,45 @@ async function main(): Promise<void> {
   await sendHeartbeat()
 
   // Periodic metrics collection
-  setInterval(() => {
+  intervals.push(setInterval(() => {
     collectAndReport().catch((err) => {
       console.error('Unhandled error in collect cycle:', err)
     })
-  }, config.collectIntervalMs)
+  }, config.collectIntervalMs))
 
   // Periodic heartbeat
-  setInterval(() => {
+  intervals.push(setInterval(() => {
     sendHeartbeat().catch((err) => {
       console.error('Unhandled error in heartbeat:', err)
     })
-  }, config.heartbeatIntervalMs)
+  }, config.heartbeatIntervalMs))
+
+  if (config.updateEnabled) {
+    await updater.checkOnce()
+    intervals.push(setInterval(() => {
+      updater.checkOnce().catch((err) => {
+        console.error('Unhandled error in updater cycle:', err)
+      })
+    }, config.updateIntervalMs))
+  }
 
   console.log('Agent running. Press Ctrl+C to stop.')
 }
+
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log(`Received ${signal}, shutting down...`)
+  for (const interval of intervals) clearInterval(interval)
+  await reporter.flushBuffer()
+  process.exit(0)
+}
+
+process.on('SIGINT', () => void shutdown('SIGINT'))
+process.on('SIGTERM', () => void shutdown('SIGTERM'))
+process.on('message', (message) => {
+  if (message === 'shutdown') void shutdown('PM2 shutdown')
+})
 
 main().catch((error) => {
   console.error('Fatal error:', error)
