@@ -197,7 +197,9 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.FromVersion).HasMaxLength(32);
             e.Property(x => x.FromBuildId).HasMaxLength(128);
             e.Property(x => x.ErrorMessage).HasMaxLength(1024);
+            e.Property(x => x.LastFailureCode).HasMaxLength(128);
             e.HasIndex(x => new { x.ServerId, x.Status });
+            e.HasIndex(x => new { x.ServerId, x.ReleaseId, x.Status });
             e.HasOne(x => x.Server).WithMany().HasForeignKey(x => x.ServerId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Release).WithMany().HasForeignKey(x => x.ReleaseId).OnDelete(DeleteBehavior.Restrict);
         });

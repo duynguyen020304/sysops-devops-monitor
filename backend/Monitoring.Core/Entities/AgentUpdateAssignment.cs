@@ -11,6 +11,9 @@ public class AgentUpdateAssignment
     public string? ErrorMessage { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+    public int RetryCount { get; set; }
+    public DateTimeOffset? NextAttemptAt { get; set; }
+    public string? LastFailureCode { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public Server Server { get; set; } = null!;
     public AgentUpdateRelease Release { get; set; } = null!;

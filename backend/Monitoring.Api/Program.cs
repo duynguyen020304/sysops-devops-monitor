@@ -32,7 +32,9 @@ builder.Configuration["ConnectionStrings:DefaultConnection"] = connectionString;
 
 // EF Core PostgreSQL
 builder.Services.AddDbContext<MonitoringDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgsql => npgsql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null)));
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -125,8 +127,12 @@ var app = builder.Build();
 // Apply pending migrations on startup
 using (var scope = app.Services.CreateScope())
 {
+    var startupLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    startupLogger.LogInformation("Database target: {DatabaseTarget}", DescribeConnectionTarget(connectionString));
+
     var db = scope.ServiceProvider.GetRequiredService<MonitoringDbContext>();
-    await db.Database.MigrateAsync();
+    await WaitForDatabaseAsync(db, startupLogger, app.Lifetime.ApplicationStopping);
+    await db.Database.MigrateAsync(app.Lifetime.ApplicationStopping);
 
     // Seed RBAC data (permissions, roles, super admin)
     await RbacSeeder.SeedAsync(db, builder.Configuration);
@@ -172,5 +178,33 @@ app.UseMiddleware<AuditLogMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+static async Task WaitForDatabaseAsync(MonitoringDbContext db, ILogger logger, CancellationToken ct)
+{
+    const int maxAttempts = 30;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++)
+    {
+        try
+        {
+            if (await db.Database.CanConnectAsync(ct)) return;
+            logger.LogWarning("Database unavailable on attempt {Attempt}/{MaxAttempts}", attempt, maxAttempts);
+        }
+        catch (Exception ex) when (attempt < maxAttempts)
+        {
+            logger.LogWarning(ex, "Database connect failed on attempt {Attempt}/{MaxAttempts}", attempt, maxAttempts);
+        }
+
+        if (attempt == maxAttempts) break;
+        await Task.Delay(TimeSpan.FromSeconds(2), ct);
+    }
+
+    throw new InvalidOperationException("Database unavailable after startup wait.");
+}
+
+static string DescribeConnectionTarget(string? rawConnectionString)
+{
+    var builder = new Npgsql.NpgsqlConnectionStringBuilder(rawConnectionString);
+    return $"Host={builder.Host};Port={builder.Port};Database={builder.Database};Username={builder.Username};Password=<redacted>";
+}
 
 await app.RunAsync();

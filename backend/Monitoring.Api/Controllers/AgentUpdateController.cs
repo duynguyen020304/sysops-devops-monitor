@@ -84,7 +84,12 @@ public class AgentUpdateController : ControllerBase
             assignment.Status = NormalizeEventStatus(request.EventType);
             assignment.UpdatedAt = DateTimeOffset.UtcNow;
             if (assignment.Status is "Succeeded" or "Failed") assignment.CompletedAt = DateTimeOffset.UtcNow;
-            if (assignment.Status == "Failed") assignment.ErrorMessage = request.Message;
+            if (assignment.Status == "Failed")
+            {
+                assignment.ErrorMessage = request.Message;
+                assignment.LastFailureCode = request.EventType;
+                assignment.NextAttemptAt = DateTimeOffset.UtcNow.AddMinutes(30);
+            }
             server.AgentUpdateStatus = assignment.Status;
         }
         await _db.SaveChangesAsync();
@@ -127,8 +132,12 @@ public class AgentUpdateController : ControllerBase
         if (server is null) return NotFound(new { message = "Server not found." });
         var release = await _db.AgentUpdateReleases.FirstOrDefaultAsync(r => r.Id == request.ReleaseId && r.WorkspaceId == workspaceId);
         if (release is null) return NotFound(new { message = "Release not found." });
+        var activeStatuses = new[] { "Pending", "Offered", "Downloading", "Verified", "Restarting" };
+        if (await _db.AgentUpdateAssignments.AnyAsync(a => a.ServerId == serverId && a.ReleaseId == release.Id && activeStatuses.Contains(a.Status)))
+            return Conflict(new { message = "Active assignment already exists for this server and release." });
         var now = DateTimeOffset.UtcNow;
-        var assignment = new AgentUpdateAssignment { Id = Guid.NewGuid(), ServerId = serverId, ReleaseId = release.Id, FromVersion = server.AgentVersion, FromBuildId = server.AgentBuildId, Status = "Pending", CreatedAt = now, UpdatedAt = now };
+        var retryCount = await _db.AgentUpdateAssignments.CountAsync(a => a.ServerId == serverId && a.ReleaseId == release.Id && a.Status == "Failed");
+        var assignment = new AgentUpdateAssignment { Id = Guid.NewGuid(), ServerId = serverId, ReleaseId = release.Id, FromVersion = server.AgentVersion, FromBuildId = server.AgentBuildId, Status = "Pending", RetryCount = retryCount + 1, CreatedAt = now, UpdatedAt = now };
         _db.AgentUpdateAssignments.Add(assignment);
         server.AgentUpdateStatus = "Pending";
         await _db.SaveChangesAsync();
