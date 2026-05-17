@@ -111,7 +111,7 @@ echo ""
 # Runtime PATH bootstrap
 # ==========================================
 export PNPM_HOME="${PNPM_HOME:-/root/.local/share/pnpm}"
-export PATH="$PNPM_HOME:$PNPM_HOME/bin:/root/.bun/bin:/root/.bun/install/global/node_modules/.bin:$PATH"
+export PATH="$PNPM_HOME:$PNPM_HOME/bin:/root/.bun/bin:/root/.bun/install/global/node_modules/.bin:/root/.bun/install/global/node_modules/pm2/bin:$PATH"
 if [[ -s "${NVM_DIR:-/root/.nvm}/nvm.sh" ]]; then
     # shellcheck disable=SC1091
     . "${NVM_DIR:-/root/.nvm}/nvm.sh"
@@ -264,6 +264,7 @@ fi
 info "Step 6/7: Writing configuration..."
 
 if ! $DRY_RUN; then
+    PM2_BIN=$(command -v pm2 || true)
     cat > "$INSTALL_DIR/.env" <<ENVEOF
 AGENT_API_URL=$AGENT_API_URL
 AGENT_SERVER_TOKEN=$SERVER_TOKEN
@@ -272,6 +273,8 @@ COLLECT_INTERVAL_MS=30000
 HEARTBEAT_INTERVAL_MS=60000
 LOG_BATCH_SIZE=100
 MAX_BUFFER_SIZE=1000
+PATH=$PATH
+PM2_BIN=$PM2_BIN
 ENVEOF
     chmod 600 "$INSTALL_DIR/.env"
     ok "Configuration written to $INSTALL_DIR/.env"

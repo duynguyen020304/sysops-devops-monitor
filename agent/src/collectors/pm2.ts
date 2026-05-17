@@ -79,7 +79,8 @@ async function readProcessLogs(processName: string, maxLines: number): Promise<P
 
 export async function collectPM2Processes(): Promise<PM2ProcessInfo[]> {
   try {
-    const { stdout } = await execAsync('pm2 jlist', { timeout: 10000 })
+    const pm2Command = process.env.PM2_BIN || 'pm2'
+    const { stdout } = await execAsync(`"${pm2Command}" jlist`, { timeout: 10000 })
     const processes: PM2RawProcess[] = JSON.parse(stdout)
 
     return processes.map((proc) => ({
