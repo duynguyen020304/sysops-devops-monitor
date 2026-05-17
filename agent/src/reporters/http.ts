@@ -156,7 +156,23 @@ export class HttpReporter {
     const payload = {
       serverId: config.serverId,
       timestamp: new Date().toISOString(),
-      ...metrics,
+      metrics: {
+        cpuUsagePercent: metrics.cpu.usagePercent,
+        memoryTotalBytes: metrics.memory.totalBytes,
+        memoryUsedBytes: metrics.memory.usedBytes,
+        memoryUsagePercent: metrics.memory.usagePercent,
+        swapUsedBytes: metrics.memory.swapUsedBytes,
+        diskTotalBytes: metrics.disk.totalBytes,
+        diskUsedBytes: metrics.disk.usedBytes,
+        diskUsagePercent: metrics.disk.usagePercent,
+        diskReadBytesPerSecond: metrics.disk.readBytesPerSec,
+        diskWriteBytesPerSecond: metrics.disk.writeBytesPerSec,
+        networkRxBytesPerSecond: metrics.network.rxBytesPerSec,
+        networkTxBytesPerSecond: metrics.network.txBytesPerSec,
+        loadAverage1m: metrics.cpu.loadAverage1m,
+        loadAverage5m: metrics.cpu.loadAverage5m,
+        loadAverage15m: metrics.cpu.loadAverage15m,
+      },
     }
 
     const success = await this.requestWithRetry('post', '/api/agent/metrics', payload)

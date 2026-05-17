@@ -100,7 +100,7 @@ export const serversApi = {
   getById: (id: string) => api.get<Server>(`/servers/${id}`),
   delete: (id: string) => api.delete(`/servers/${id}`),
   getMetrics: (id: string, from?: string, to?: string) =>
-    api.get<ServerMetric[]>(`/servers/${id}/metrics`, { params: { from, to } }),
+    api.get<ServerMetric[]>(`/servers/${id}/metrics/raw`, { params: { from, to } }),
   getHealth: (id: string) => api.get<ServerHealth>(`/servers/${id}/health`),
   deployAgent: (id: string) =>
     api.post<DeployAgentResponse>(`/servers/${id}/deploy-agent`),

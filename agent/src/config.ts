@@ -1,3 +1,14 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const envPath = join(process.cwd(), '.env')
+if (existsSync(envPath)) {
+  for (const line of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)\s*$/)
+    if (match && process.env[match[1]] === undefined) process.env[match[1]] = match[2]
+  }
+}
+
 const apiUrl = process.env.AGENT_API_URL || 'http://localhost:5000'
 const normalizedApiUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl
 const parsedApiUrl = URL.canParse(normalizedApiUrl) ? new URL(normalizedApiUrl) : null
