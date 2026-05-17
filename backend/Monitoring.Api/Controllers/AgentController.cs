@@ -94,6 +94,8 @@ public class AgentController : ControllerBase
         var now = DateTime.UtcNow;
         var processIdsByName = await _db.PM2Processes
             .Where(p => p.ServerId == request.ServerId)
+            .GroupBy(p => p.Name)
+            .Select(g => new { Name = g.Key, Id = g.OrderByDescending(p => p.UpdatedAt).First().Id })
             .ToDictionaryAsync(p => p.Name, p => p.Id);
 
         foreach (var logEntry in request.Logs)
