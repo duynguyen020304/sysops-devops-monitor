@@ -18,16 +18,17 @@ public class PM2Service : IPM2Service
 
     public async Task ProcessPM2DataAsync(Guid serverId, List<PM2ProcessDto> processes)
     {
-        // Get existing processes for this server
         var existingProcesses = await _db.PM2Processes
             .Where(p => p.ServerId == serverId)
-            .ToDictionaryAsync(p => p.Pm2Id);
+            .GroupBy(p => p.Name)
+            .Select(g => g.OrderByDescending(p => p.UpdatedAt).ThenByDescending(p => p.CreatedAt).First())
+            .ToDictionaryAsync(p => p.Name);
 
         var now = DateTime.UtcNow;
 
         foreach (var dto in processes)
         {
-            if (existingProcesses.TryGetValue(dto.Pm2Id, out var existing))
+            if (existingProcesses.TryGetValue(dto.Name, out var existing))
             {
                 // Detect status change (potential restart)
                 var oldStatus = existing.Status;
@@ -36,6 +37,7 @@ public class PM2Service : IPM2Service
                 if (oldStatus != newStatus)
                 {
                     // Log the status change as a PM2 log entry
+                    var message = $"Status changed from {oldStatus} to {newStatus}";
                     _db.PM2Logs.Add(new PM2Log
                     {
                         Id = Guid.NewGuid(),
@@ -44,13 +46,15 @@ public class PM2Service : IPM2Service
                         StreamType = LogStreamType.StdOut,
                         Timestamp = DateTimeOffset.UtcNow,
                         Level = newStatus == PM2ProcessStatus.Errored ? "error" : "info",
-                        Message = $"Status changed from {oldStatus} to {newStatus}",
-                        RawMessage = $"Status changed from {oldStatus} to {newStatus}",
+                        Message = message,
+                        RawMessage = message,
+                        Fingerprint = $"status:{serverId}:{existing.Id}:{oldStatus}:{newStatus}:{now:O}",
                         CreatedAt = now
                     });
                 }
 
                 // Update existing process
+                existing.Pm2Id = dto.Pm2Id;
                 existing.Pid = dto.Pid;
                 existing.Status = newStatus;
                 existing.UptimeSeconds = dto.UptimeSeconds;
@@ -87,9 +91,9 @@ public class PM2Service : IPM2Service
         }
 
         // Mark processes that are no longer reported as Stopped
-        var reportedPm2Ids = processes.Select(p => p.Pm2Id).ToHashSet();
+        var reportedNames = processes.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
         var staleProcesses = existingProcesses.Values
-            .Where(p => !reportedPm2Ids.Contains(p.Pm2Id) && p.Status != PM2ProcessStatus.Stopped)
+            .Where(p => !reportedNames.Contains(p.Name) && p.Status != PM2ProcessStatus.Stopped)
             .ToList();
 
         foreach (var stale in staleProcesses)
@@ -105,6 +109,8 @@ public class PM2Service : IPM2Service
     {
         return await _db.PM2Processes
             .Where(p => p.ServerId == serverId)
+            .GroupBy(p => p.Name)
+            .Select(g => g.OrderByDescending(p => p.UpdatedAt).ThenByDescending(p => p.CreatedAt).First())
             .OrderBy(p => p.Pm2Id)
             .ToListAsync();
     }
@@ -116,9 +122,19 @@ public class PM2Service : IPM2Service
 
     public async Task<List<PM2Log>> GetProcessLogsAsync(Guid processId, int limit = 100)
     {
+        var process = await _db.PM2Processes.FindAsync(processId);
+        if (process is null) return [];
+
+        var siblingIds = await _db.PM2Processes
+            .Where(p => p.ServerId == process.ServerId && p.Name == process.Name)
+            .Select(p => p.Id)
+            .ToListAsync();
+
         return await _db.PM2Logs
-            .Where(l => l.ProcessId == processId)
+            .Where(l => siblingIds.Contains(l.ProcessId))
             .OrderByDescending(l => l.Timestamp)
+            .ThenByDescending(l => l.CreatedAt)
+            .ThenByDescending(l => l.Id)
             .Take(limit)
             .ToListAsync();
     }

@@ -2,6 +2,11 @@ import axios from 'axios'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 vi.mock('axios', () => ({ default: { post: vi.fn(), get: vi.fn() } }))
+vi.mock('node:fs/promises', () => ({
+  readFile: vi.fn(async () => '[]'),
+  mkdir: vi.fn(async () => undefined),
+  writeFile: vi.fn(async () => undefined),
+}))
 vi.mock('../../config.js', () => ({ config: { apiUrl: 'http://api', serverToken: 'tok', serverId: 'srv', maxBufferSize: 2 } }))
 
 const post = vi.mocked(axios.post)
@@ -37,13 +42,11 @@ describe('HttpReporter', () => {
     expect(post).toHaveBeenCalledTimes(2)
   })
 
-  it('drops old buffered data when full', async () => {
+  it('spools buffered data to disk', async () => {
+    const fs = await import('node:fs/promises')
     const { HttpReporter } = await import('../../reporters/http.js')
     const r: any = new HttpReporter()
-    r.bufferData({ type: 'metrics', payload: 1, timestamp: '1' })
-    r.bufferData({ type: 'metrics', payload: 2, timestamp: '2' })
-    r.bufferData({ type: 'metrics', payload: 3, timestamp: '3' })
-    expect(r.buffer.length).toBeLessThanOrEqual(2)
-    expect(r.buffer.at(-1).payload).toBe(3)
+    await r.bufferData({ type: 'logs', payload: 1, timestamp: '1' })
+    expect(vi.mocked(fs.writeFile)).toHaveBeenCalled()
   })
 })

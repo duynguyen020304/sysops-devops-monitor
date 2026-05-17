@@ -13,22 +13,52 @@ const process = ref<PM2Process | null>(null)
 const stdoutLogs = ref<PM2Log[]>([])
 const errorLogs = ref<PM2Log[]>([])
 const loading = ref(true)
+const logsLoading = ref(false)
+const processError = ref('')
+const logsError = ref('')
 const activeTab = ref<'stdout' | 'stderr'>('stdout')
+
+function normalizeStreamType(value: string): 'stdout' | 'stderr' {
+  const v = value.toLowerCase()
+  if (v === 'stderr' || v === 'stderr' || v === 'err') return 'stderr'
+  return 'stdout'
+}
+
+function errorText(error: unknown, fallback: string): string {
+  const status = (error as { response?: { status?: number } })?.response?.status
+  if (status === 404) return 'Process not found.'
+  if (status === 401) return 'Session expired. Please sign in again.'
+  return fallback
+}
+
+async function loadLogs(): Promise<void> {
+  logsLoading.value = true
+  logsError.value = ''
+  try {
+    const logsRes = await pm2Api.getLogs(processId, 200)
+    stdoutLogs.value = logsRes.data.filter((l) => normalizeStreamType(l.streamType) === 'stdout')
+    errorLogs.value = logsRes.data.filter((l) => normalizeStreamType(l.streamType) === 'stderr')
+  } catch (error) {
+    logsError.value = errorText(error, 'Failed to load PM2 logs.')
+  } finally {
+    logsLoading.value = false
+  }
+}
 
 onMounted(async () => {
   loading.value = true
+  processError.value = ''
   try {
-    const [processRes, logsRes] = await Promise.all([
-      pm2Api.getById(processId),
-      pm2Api.getLogs(processId, 200),
-    ])
+    const processRes = await pm2Api.getById(processId)
     process.value = processRes.data
-    stdoutLogs.value = logsRes.data.filter((l) => l.streamType === 'stdout' || l.streamType === 'StdOut')
-    errorLogs.value = logsRes.data.filter((l) => l.streamType === 'stderr' || l.streamType === 'StdErr')
-  } catch {
-    // handled by UI
+  } catch (error) {
+    processError.value = errorText(error, 'Failed to load PM2 process.')
   } finally {
     loading.value = false
+  }
+
+  if (process.value) {
+    await loadLogs()
   }
 })
 
@@ -151,7 +181,20 @@ const currentLogs = computed(() =>
           class="h-96 overflow-y-auto font-mono text-xs leading-relaxed"
         >
           <div
-            v-if="currentLogs.length === 0"
+            v-if="logsLoading"
+            class="flex h-full items-center justify-center text-gray-500"
+          >
+            Loading logs...
+          </div>
+          <div
+            v-else-if="logsError"
+            class="flex h-full flex-col items-center justify-center gap-3 text-gray-500"
+          >
+            <p>{{ logsError }}</p>
+            <button @click="loadLogs" class="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-500">Retry</button>
+          </div>
+          <div
+            v-else-if="currentLogs.length === 0"
             class="flex h-full items-center justify-center text-gray-500"
           >
             No {{ activeTab === 'stdout' ? 'stdout' : 'error' }} log entries found
@@ -175,7 +218,7 @@ const currentLogs = computed(() =>
 
     <!-- Not found -->
     <div v-else class="flex flex-col items-center justify-center py-20">
-      <p class="text-[var(--color-text-secondary)]">Process not found.</p>
+      <p class="text-[var(--color-text-secondary)]">{{ processError || 'Process not found.' }}</p>
       <button @click="router.push('/pm2')" class="mt-3 text-sm text-blue-400 hover:underline">
         Back to PM2 processes
       </button>

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 using Monitoring.Core.DTOs;
 using Monitoring.Core.Entities;
 using Monitoring.Core.Enums;
@@ -98,6 +100,9 @@ public class AgentController : ControllerBase
             .Select(g => new { Name = g.Key, Id = g.OrderByDescending(p => p.UpdatedAt).First().Id })
             .ToDictionaryAsync(p => p.Name, p => p.Id);
 
+        var candidates = new List<PM2Log>();
+        var droppedNoProcess = 0;
+
         foreach (var logEntry in request.Logs)
         {
             var streamType = logEntry.StreamType.ToLowerInvariant() switch
@@ -114,26 +119,53 @@ public class AgentController : ControllerBase
             }
 
             if (processId is null)
+            {
+                droppedNoProcess++;
                 continue;
+            }
 
-            var pm2Log = new PM2Log
+            var timestamp = logEntry.Timestamp ?? DateTimeOffset.UtcNow;
+            candidates.Add(new PM2Log
             {
                 Id = Guid.NewGuid(),
                 ServerId = request.ServerId,
                 ProcessId = processId.Value,
                 StreamType = streamType,
-                Timestamp = DateTimeOffset.UtcNow,
+                Timestamp = timestamp,
                 Level = logEntry.Level,
                 Message = logEntry.Message,
                 RawMessage = logEntry.Message,
+                Fingerprint = CreateLogFingerprint(request.ServerId, processId.Value, streamType, timestamp, logEntry.Message),
                 CreatedAt = now
-            };
+            });
+        }
+
+        var fingerprints = candidates.Select(l => l.Fingerprint).Distinct().ToList();
+        var existingFingerprints = await _db.PM2Logs
+            .Where(l => fingerprints.Contains(l.Fingerprint))
+            .Select(l => l.Fingerprint)
+            .ToListAsync();
+        var existingSet = existingFingerprints.ToHashSet(StringComparer.Ordinal);
+        var inserted = 0;
+        foreach (var pm2Log in candidates.GroupBy(l => l.Fingerprint).Select(g => g.First()))
+        {
+            if (existingSet.Contains(pm2Log.Fingerprint))
+                continue;
 
             _db.PM2Logs.Add(pm2Log);
+            existingSet.Add(pm2Log.Fingerprint);
+            inserted++;
         }
 
         await _db.SaveChangesAsync();
-        return Ok(new { message = $"Recorded {request.Logs.Count} log entries." });
+        var duplicates = request.Logs.Count - inserted - droppedNoProcess;
+        return Ok(new { received = request.Logs.Count, inserted, duplicates, droppedNoProcess });
+    }
+
+    private static string CreateLogFingerprint(Guid serverId, Guid processId, LogStreamType streamType, DateTimeOffset timestamp, string message)
+    {
+        var raw = $"{serverId}|{processId}|{streamType}|{timestamp.ToUniversalTime():O}|{message}";
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
     }
 
     private async Task<bool> ValidateAgentTokenAsync()

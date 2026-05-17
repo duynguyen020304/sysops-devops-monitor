@@ -173,6 +173,7 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.ExecutionMode).IsRequired().HasMaxLength(32);
             e.Property(x => x.NodeVersion).IsRequired().HasMaxLength(32);
             e.HasIndex(x => x.ServerId);
+            e.HasIndex(x => new { x.ServerId, x.Name }).IsUnique();
         });
 
         // PM2Log
@@ -182,8 +183,10 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.Level).IsRequired().HasMaxLength(32);
             e.Property(x => x.Message).IsRequired();
             e.Property(x => x.RawMessage).IsRequired();
+            e.Property(x => x.Fingerprint).IsRequired().HasMaxLength(128);
             e.HasIndex(x => x.ServerId);
             e.HasIndex(x => x.ProcessId);
+            e.HasIndex(x => x.Fingerprint).IsUnique();
         });
 
         // ServerMetric

@@ -1,4 +1,6 @@
 import axios, { AxiosError } from 'axios'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { config } from '../config.js'
 import type { CpuMetrics } from '../collectors/cpu.js'
 import type { MemoryMetrics } from '../collectors/memory.js'
@@ -28,6 +30,7 @@ interface BufferedData {
 
 const MAX_RETRIES = 3
 const BASE_DELAY_MS = 1000
+const spoolPath = process.env.AGENT_SPOOL_PATH || join(process.cwd(), 'agent-data', 'spool.json')
 
 export class HttpReporter {
   private buffer: BufferedData[] = []
@@ -83,19 +86,30 @@ export class HttpReporter {
     return false
   }
 
-  private bufferData(data: BufferedData): void {
-    if (this.buffer.length >= config.maxBufferSize) {
-      // Drop oldest entries
-      this.buffer = this.buffer.slice(-Math.floor(config.maxBufferSize / 2))
-    }
-    this.buffer.push(data)
+  private async loadSpool(): Promise<BufferedData[]> {
+    try { return JSON.parse(await readFile(spoolPath, 'utf-8')) as BufferedData[] } catch { return [] }
+  }
+
+  private async saveSpool(items: BufferedData[]): Promise<void> {
+    await mkdir(dirname(spoolPath), { recursive: true })
+    await writeFile(spoolPath, JSON.stringify(items.slice(-config.maxBufferSize)), 'utf-8')
+  }
+
+  private async bufferData(data: BufferedData): Promise<void> {
+    const spool = await this.loadSpool()
+    spool.push(data)
+    await this.saveSpool(spool)
   }
 
   async flushBuffer(): Promise<void> {
-    if (this.isFlushing || this.buffer.length === 0) return
+    if (this.isFlushing) return
 
     this.isFlushing = true
-    const toFlush = [...this.buffer]
+    const toFlush = [...(await this.loadSpool()), ...this.buffer]
+    if (toFlush.length === 0) {
+      this.isFlushing = false
+      return
+    }
     this.buffer = []
 
     let failedCount = 0
@@ -122,12 +136,15 @@ export class HttpReporter {
       const success = await this.requestWithRetry('post', path, item.payload)
       if (!success) {
         failedCount++
+        await this.saveSpool(toFlush.slice(toFlush.indexOf(item)))
+        break
       }
     }
 
     if (failedCount > 0) {
       console.warn(`Failed to flush ${failedCount}/${toFlush.length} buffered items`)
     } else {
+      await this.saveSpool([])
       console.log(`Flushed ${toFlush.length} buffered items`)
     }
 
@@ -141,7 +158,7 @@ export class HttpReporter {
     })
 
     if (!success) {
-      this.bufferData({
+      await this.bufferData({
         type: 'heartbeat',
         payload: { serverId, timestamp: new Date().toISOString() },
         timestamp: new Date().toISOString(),
@@ -178,7 +195,7 @@ export class HttpReporter {
     const success = await this.requestWithRetry('post', '/api/agent/metrics', payload)
 
     if (!success) {
-      this.bufferData({
+      await this.bufferData({
         type: 'metrics',
         payload,
         timestamp: new Date().toISOString(),
@@ -198,7 +215,7 @@ export class HttpReporter {
     const success = await this.requestWithRetry('post', '/api/agent/pm2', payload)
 
     if (!success) {
-      this.bufferData({
+      await this.bufferData({
         type: 'pm2',
         payload,
         timestamp: new Date().toISOString(),
@@ -217,13 +234,14 @@ export class HttpReporter {
         streamType: log.logType === 'err' ? 'stderr' : 'stdout',
         level: log.logType === 'err' ? 'error' : 'info',
         message: log.line,
+        timestamp: log.timestamp,
       })),
     }
 
     const success = await this.requestWithRetry('post', '/api/agent/logs', payload)
 
     if (!success) {
-      this.bufferData({
+      await this.bufferData({
         type: 'logs',
         payload,
         timestamp: new Date().toISOString(),
