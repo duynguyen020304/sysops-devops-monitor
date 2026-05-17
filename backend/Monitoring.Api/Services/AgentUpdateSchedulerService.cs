@@ -1,7 +1,17 @@
+using Monitoring.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 using Monitoring.Infrastructure.Data;
 
 namespace Monitoring.Api.Services;
+
+internal static class AgentUpdateRetryPolicy
+{
+    public const int MaxRetryCount = 3;
+
+    public static bool CanRetry(int retryCount) => retryCount < MaxRetryCount;
+
+    public static int NextRetryCount(AgentUpdateAssignment? lastForRelease) => lastForRelease is null ? 0 : lastForRelease.RetryCount + 1;
+}
 
 public class AgentUpdateSchedulerService : BackgroundService
 {
@@ -39,7 +49,7 @@ public class AgentUpdateSchedulerService : BackgroundService
                 .FirstOrDefaultAsync(ct);
             if (latest is null) continue;
 
-            await ExpireStaleAssignmentsAsync(db, ct);
+            await ExpireStaleAssignmentsAsync(db, workspaceId, ct);
 
             var servers = await db.Servers
                 .Where(s => s.WorkspaceId == workspaceId && s.ServerToken != null && s.AgentBuildId != latest.BuildId)
@@ -66,7 +76,8 @@ public class AgentUpdateSchedulerService : BackgroundService
                     _logger.LogInformation("Skip agent update for server {ServerId}: cooldown until {NextAttemptAt}", server.Id, lastForRelease.NextAttemptAt);
                     continue;
                 }
-                if ((lastForRelease?.RetryCount ?? 0) >= 3)
+                var nextRetryCount = AgentUpdateRetryPolicy.NextRetryCount(lastForRelease);
+                if (!AgentUpdateRetryPolicy.CanRetry(nextRetryCount))
                 {
                     _logger.LogWarning("Skip agent update for server {ServerId}: max retries reached for release {ReleaseId}", server.Id, latest.Id);
                     continue;
@@ -80,7 +91,7 @@ public class AgentUpdateSchedulerService : BackgroundService
                     FromVersion = server.AgentVersion,
                     FromBuildId = server.AgentBuildId,
                     Status = "Pending",
-                    RetryCount = (lastForRelease?.RetryCount ?? 0) + 1,
+                    RetryCount = nextRetryCount,
                     CreatedAt = now,
                     UpdatedAt = now,
                 });
@@ -91,12 +102,12 @@ public class AgentUpdateSchedulerService : BackgroundService
         await db.SaveChangesAsync(ct);
     }
 
-    private async Task ExpireStaleAssignmentsAsync(MonitoringDbContext db, CancellationToken ct)
+    private async Task ExpireStaleAssignmentsAsync(MonitoringDbContext db, Guid workspaceId, CancellationToken ct)
     {
         var activeStatuses = new[] { "Pending", "Offered", "Downloading", "Verified", "Restarting" };
         var cutoff = DateTimeOffset.UtcNow.AddMinutes(-30);
         var stale = await db.AgentUpdateAssignments
-            .Where(a => activeStatuses.Contains(a.Status) && a.UpdatedAt < cutoff)
+            .Where(a => activeStatuses.Contains(a.Status) && a.UpdatedAt < cutoff && a.Server.WorkspaceId == workspaceId)
             .ToListAsync(ct);
         foreach (var assignment in stale)
         {

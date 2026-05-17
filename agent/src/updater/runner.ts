@@ -13,20 +13,22 @@ export class AgentUpdater {
   async checkOnce(): Promise<void> {
     if (!config.updateEnabled || this.running) return
     this.running = true
+    let assignmentId: string | undefined
     try {
       const offer = await this.client.check(AGENT_VERSION, AGENT_BUILD_ID)
       if (offer.action !== 'update' || !offer.assignmentId || !offer.release) return
-      await this.client.reportEvent({ assignmentId: offer.assignmentId, eventType: 'Downloading' })
-      const staged = await stageUpdate(offer.assignmentId, offer.release)
-      await this.client.reportEvent({ assignmentId: offer.assignmentId, eventType: 'Verified', metadata: { ...staged } })
+      assignmentId = offer.assignmentId
+      await this.client.reportEvent({ assignmentId, eventType: 'Downloading' })
+      const staged = await stageUpdate(assignmentId, offer.release)
+      await this.client.reportEvent({ assignmentId, eventType: 'Verified', metadata: { ...staged } })
       spawnUpdater(staged.markerPath)
-      await this.client.reportEvent({ assignmentId: offer.assignmentId, eventType: 'Restarting' })
+      await this.client.reportEvent({ assignmentId, eventType: 'Restarting' })
       process.kill(process.pid, 'SIGTERM')
     } catch (error) {
       console.error('Agent update check failed:', error)
       const message = error instanceof Error ? error.message : String(error)
       try {
-        await this.client.reportEvent({ eventType: 'Failed', message })
+        await this.client.reportEvent({ assignmentId, eventType: 'Failed', message })
       } catch {
         // best-effort only
       }

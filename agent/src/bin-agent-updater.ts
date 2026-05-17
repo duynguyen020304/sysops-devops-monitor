@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, readFile, rm } from 'node:fs/promises'
+import { mkdir, readFile, rm, symlink } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { atomicSymlink } from './updater/stager.js'
 
@@ -12,12 +12,19 @@ async function extractTarGz(artifactPath: string, releaseDir: string): Promise<v
   if (tar.status !== 0) throw new Error(`tar extraction failed with exit ${tar.status}`)
 }
 
+async function linkEnvFile(releaseDir: string): Promise<void> {
+  const envPath = `${releaseDir}/.env`
+  await rm(envPath, { force: true, recursive: true })
+  await symlink(process.env.AGENT_ENV_PATH || '/opt/monitoring-agent/.env', envPath)
+}
+
 async function main() {
   const markerPath = process.argv[2]
   if (!markerPath) throw new Error('pending update marker path required')
   const pending = JSON.parse(await readFile(markerPath, 'utf-8')) as PendingUpdate
   const currentLink = process.env.AGENT_CURRENT_LINK || '/opt/monitoring-agent/current'
   await extractTarGz(pending.artifactPath, pending.releaseDir)
+  await linkEnvFile(pending.releaseDir)
   await atomicSymlink(pending.releaseDir, currentLink)
   await rm(markerPath, { force: true })
 

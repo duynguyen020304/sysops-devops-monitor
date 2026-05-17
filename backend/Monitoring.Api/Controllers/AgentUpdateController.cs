@@ -133,11 +133,17 @@ public class AgentUpdateController : ControllerBase
         var release = await _db.AgentUpdateReleases.FirstOrDefaultAsync(r => r.Id == request.ReleaseId && r.WorkspaceId == workspaceId);
         if (release is null) return NotFound(new { message = "Release not found." });
         var activeStatuses = new[] { "Pending", "Offered", "Downloading", "Verified", "Restarting" };
-        if (await _db.AgentUpdateAssignments.AnyAsync(a => a.ServerId == serverId && a.ReleaseId == release.Id && activeStatuses.Contains(a.Status)))
-            return Conflict(new { message = "Active assignment already exists for this server and release." });
+        if (await _db.AgentUpdateAssignments.AnyAsync(a => a.ServerId == serverId && activeStatuses.Contains(a.Status)))
+            return Conflict(new { message = "Active assignment already exists for this server." });
         var now = DateTimeOffset.UtcNow;
-        var retryCount = await _db.AgentUpdateAssignments.CountAsync(a => a.ServerId == serverId && a.ReleaseId == release.Id && a.Status == "Failed");
-        var assignment = new AgentUpdateAssignment { Id = Guid.NewGuid(), ServerId = serverId, ReleaseId = release.Id, FromVersion = server.AgentVersion, FromBuildId = server.AgentBuildId, Status = "Pending", RetryCount = retryCount + 1, CreatedAt = now, UpdatedAt = now };
+        var lastForRelease = await _db.AgentUpdateAssignments
+            .Where(a => a.ServerId == serverId && a.ReleaseId == release.Id)
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefaultAsync();
+        var retryCount = AgentUpdateRetryPolicy.NextRetryCount(lastForRelease);
+        if (!AgentUpdateRetryPolicy.CanRetry(retryCount))
+            return Conflict(new { message = "Max retries reached for this server and release." });
+        var assignment = new AgentUpdateAssignment { Id = Guid.NewGuid(), ServerId = serverId, ReleaseId = release.Id, FromVersion = server.AgentVersion, FromBuildId = server.AgentBuildId, Status = "Pending", RetryCount = retryCount, CreatedAt = now, UpdatedAt = now };
         _db.AgentUpdateAssignments.Add(assignment);
         server.AgentUpdateStatus = "Pending";
         await _db.SaveChangesAsync();
