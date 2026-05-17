@@ -17,9 +17,11 @@ DotNetEnv.Env.Load(Path.Combine(Directory.GetCurrentDirectory(), "..", ".env"));
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Build connection string from individual DB_ env vars if CONNECTION_STRING not set
-var connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
-if (string.IsNullOrEmpty(connectionString))
+// Prefer canonical .NET config env var: ConnectionStrings__DefaultConnection.
+// Keep CONNECTION_STRING + DB_* as local/legacy fallbacks.
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("CONNECTION_STRING");
+if (string.IsNullOrWhiteSpace(connectionString))
 {
     var dbHost = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
     var dbPort = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
@@ -28,7 +30,7 @@ if (string.IsNullOrEmpty(connectionString))
     var dbPass = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "postgres";
     connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
 }
-// Override the config value so GetConnectionString picks it up
+
 builder.Configuration["ConnectionStrings:DefaultConnection"] = connectionString;
 
 // EF Core PostgreSQL
