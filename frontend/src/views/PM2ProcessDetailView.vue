@@ -23,8 +23,8 @@ onMounted(async () => {
       pm2Api.getLogs(processId, 200),
     ])
     process.value = processRes.data
-    stdoutLogs.value = logsRes.data.filter((l) => l.streamType === 'stdout')
-    errorLogs.value = logsRes.data.filter((l) => l.streamType === 'stderr')
+    stdoutLogs.value = logsRes.data.filter((l) => l.streamType === 'stdout' || l.streamType === 'StdOut')
+    errorLogs.value = logsRes.data.filter((l) => l.streamType === 'stderr' || l.streamType === 'StdErr')
   } catch {
     // handled by UI
   } finally {

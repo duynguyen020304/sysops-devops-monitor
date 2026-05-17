@@ -92,20 +92,33 @@ public class AgentController : ControllerBase
             return NotFound(new { message = "Server not found." });
 
         var now = DateTime.UtcNow;
+        var processIdsByName = await _db.PM2Processes
+            .Where(p => p.ServerId == request.ServerId)
+            .ToDictionaryAsync(p => p.Name, p => p.Id);
 
         foreach (var logEntry in request.Logs)
         {
             var streamType = logEntry.StreamType.ToLowerInvariant() switch
             {
-                "stderr" => LogStreamType.StdErr,
+                "stderr" or "err" => LogStreamType.StdErr,
                 _ => LogStreamType.StdOut
             };
+
+            var processId = logEntry.ProcessId;
+            if (processId is null && !string.IsNullOrWhiteSpace(logEntry.ProcessName)
+                                  && processIdsByName.TryGetValue(logEntry.ProcessName, out var mappedProcessId))
+            {
+                processId = mappedProcessId;
+            }
+
+            if (processId is null)
+                continue;
 
             var pm2Log = new PM2Log
             {
                 Id = Guid.NewGuid(),
                 ServerId = request.ServerId,
-                ProcessId = logEntry.ProcessId ?? Guid.Empty,
+                ProcessId = processId.Value,
                 StreamType = streamType,
                 Timestamp = DateTimeOffset.UtcNow,
                 Level = logEntry.Level,

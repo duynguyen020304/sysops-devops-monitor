@@ -212,7 +212,12 @@ export class HttpReporter {
     const payload = {
       serverId: config.serverId,
       timestamp: new Date().toISOString(),
-      logs,
+      logs: logs.map((log) => ({
+        processName: log.processName,
+        streamType: log.logType === 'err' ? 'stderr' : 'stdout',
+        level: log.logType === 'err' ? 'error' : 'info',
+        message: log.line,
+      })),
     }
 
     const success = await this.requestWithRetry('post', '/api/agent/logs', payload)
