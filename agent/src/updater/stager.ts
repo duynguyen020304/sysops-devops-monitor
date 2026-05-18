@@ -52,7 +52,14 @@ async function readTrustedPublicKey(keyId: string): Promise<string> {
 
 async function downloadFile(url: string, path: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
-  const { data } = await axios.get(url, { responseType: 'stream', timeout: 60000 })
+  const { data } = await axios.get(url, {
+    responseType: 'stream',
+    timeout: 60000,
+    headers: {
+      'Authorization': `Bearer ${config.serverToken}`,
+      'X-Server-Id': config.serverId,
+    },
+  })
   await pipeline(data, createWriteStream(path, { mode: 0o600 }))
 }
 
