@@ -35,7 +35,7 @@ public static class AgentUpdateManifestTools
         using var key = System.Security.Cryptography.ECDsa.Create();
         key.ImportFromPem(privateKeyPem);
         var data = System.Text.Encoding.UTF8.GetBytes(canonicalManifestJson);
-        var signature = key.SignData(data, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        var signature = key.SignData(data, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.DSASignatureFormat.Rfc3279DerSequence);
         return Convert.ToBase64String(signature);
     }
 }
