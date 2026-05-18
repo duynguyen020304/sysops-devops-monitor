@@ -9,10 +9,12 @@ const router = useRouter()
 const servers = ref<Server[]>([])
 const allServices = ref<(SystemdService & { serverHostname: string; serverId: string })[]>([])
 const loading = ref(true)
+const refreshing = ref(false)
+const refreshMessage = ref('')
 const serverFilter = ref('')
 const stateFilter = ref('')
 
-onMounted(async () => {
+async function loadServices(): Promise<void> {
   loading.value = true
   try {
     const { data } = await serversApi.list()
@@ -38,7 +40,24 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+async function forceRefresh(): Promise<void> {
+  const targetServers = serverFilter.value ? servers.value.filter((s) => s.id === serverFilter.value) : servers.value
+  if (targetServers.length === 0) return
+  refreshing.value = true
+  refreshMessage.value = ''
+  try {
+    await Promise.all(targetServers.map((server) => systemdApi.refreshServer(server.id)))
+    refreshMessage.value = `Refresh requested for ${targetServers.length} server(s). Agent will snapshot on next poll.`
+  } catch {
+    refreshMessage.value = 'Refresh request failed.'
+  } finally {
+    refreshing.value = false
+  }
+}
+
+onMounted(loadServices)
 
 const filteredServices = computed(() => {
   return allServices.value.filter((p) => {
@@ -91,6 +110,26 @@ function formatMemory(bytes: number): string {
           <option value="">All states</option>
           <option v-for="s in states" :key="s" :value="s">{{ s }}</option>
         </select>
+        <button
+          type="button"
+          class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          :disabled="refreshing"
+          @click="forceRefresh"
+        >
+          {{ refreshing ? 'Requesting...' : 'Force refresh' }}
+        </button>
+        <button
+          type="button"
+          class="rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm text-[var(--color-text)] disabled:opacity-50"
+          :disabled="loading"
+          @click="loadServices"
+        >
+          Reload UI
+        </button>
+      </div>
+
+      <div v-if="refreshMessage" class="mb-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-4 py-3 text-sm text-[var(--color-text-secondary)]">
+        {{ refreshMessage }}
       </div>
 
       <!-- Empty -->

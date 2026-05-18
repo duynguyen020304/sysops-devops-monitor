@@ -37,17 +37,26 @@ async function collectAndReport(): Promise<void> {
       }
     }
 
-    if (config.systemdEnabled) {
-      const systemdServices = await collectSystemdServices(config.systemdUnits)
-      await reporter.sendSystemdServices(systemdServices)
-      const units = config.systemdUnits.length > 0 ? config.systemdUnits : systemdServices.map((s) => s.name)
-      const systemdLogs = await collectSystemdLogs(units, config.systemdLogBatchSize)
-      await reporter.sendSystemdLogs(systemdLogs)
-    }
-
     console.log('Metrics collected and sent')
   } catch (error) {
     console.error('Error collecting metrics:', error)
+  }
+}
+
+async function collectAndReportSystemd(reason = 'scheduled'): Promise<void> {
+  if (shuttingDown || !config.systemdEnabled) return
+  try {
+    console.log(`Collecting systemd snapshot (${reason})...`)
+    const systemdServices = await collectSystemdServices({
+      scope: config.systemdDiscoveryScope,
+      explicitUnits: config.systemdUnits,
+    })
+    await reporter.sendSystemdServices(systemdServices)
+    const units = systemdServices.length > 0 ? systemdServices.map((s) => s.name) : config.systemdUnits
+    const systemdLogs = await collectSystemdLogs(units, config.systemdLogBatchSize)
+    await reporter.sendSystemdLogs(systemdLogs)
+  } catch (error) {
+    console.error('Error collecting systemd snapshot:', error)
   }
 }
 
@@ -60,12 +69,18 @@ async function sendHeartbeat(): Promise<void> {
   }
 }
 
+async function pollSystemdRefreshCommand(): Promise<void> {
+  if (shuttingDown || !config.systemdEnabled) return
+  if (await reporter.shouldRefreshSystemd()) await collectAndReportSystemd('forced')
+}
+
 async function main(): Promise<void> {
   console.log('Monitoring Agent starting...')
   console.log(`API URL: ${config.apiUrl}`)
   console.log(`Server ID: ${config.serverId}`)
   console.log(`Collect interval: ${config.collectIntervalMs}ms`)
   console.log(`Heartbeat interval: ${config.heartbeatIntervalMs}ms`)
+  console.log(`Systemd collect interval: ${config.systemdCollectIntervalMs}ms`)
 
   if (!config.serverId) {
     console.warn('WARNING: AGENT_SERVER_ID is not set')
@@ -91,6 +106,20 @@ async function main(): Promise<void> {
       console.error('Unhandled error in heartbeat:', err)
     })
   }, config.heartbeatIntervalMs))
+
+  if (config.systemdEnabled) {
+    await collectAndReportSystemd('startup')
+    intervals.push(setInterval(() => {
+      collectAndReportSystemd('scheduled').catch((err) => {
+        console.error('Unhandled error in systemd cycle:', err)
+      })
+    }, config.systemdCollectIntervalMs))
+    intervals.push(setInterval(() => {
+      pollSystemdRefreshCommand().catch((err) => {
+        console.error('Unhandled error polling systemd refresh command:', err)
+      })
+    }, config.systemdCommandPollIntervalMs))
+  }
 
   if (config.updateEnabled) {
     await updater.checkOnce()

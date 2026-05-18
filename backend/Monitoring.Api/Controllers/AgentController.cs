@@ -59,6 +59,17 @@ public class AgentController : ControllerBase
         }
     }
 
+    [HttpGet("systemd/refresh-command")]
+    public async Task<IActionResult> GetSystemdRefreshCommand()
+    {
+        if (!await ValidateAgentTokenAsync()) return Unauthorized(new { message = "Invalid agent token." });
+        if (!Guid.TryParse(Request.Headers["X-Server-Id"].FirstOrDefault(), out var serverId)) return BadRequest(new { message = "Missing server id." });
+        var server = await _db.Servers.FindAsync(serverId);
+        if (server is null) return NotFound(new { message = "Server not found." });
+        var due = server.SystemdRefreshRequestedAt.HasValue && (!server.SystemdLastRefreshedAt.HasValue || server.SystemdRefreshRequestedAt > server.SystemdLastRefreshedAt);
+        return Ok(new { refresh = due, requestedAt = server.SystemdRefreshRequestedAt });
+    }
+
     [HttpPost("metrics")]
     public async Task<IActionResult> SubmitMetrics([FromBody] AgentMetricsRequest request)
     {
@@ -119,6 +130,12 @@ public class AgentController : ControllerBase
             svc.CpuUsageNSec = dto.CpuUsageNSec;
             svc.RestartCount = dto.RestartCount;
             svc.UpdatedAt = now;
+        }
+        var server = await _db.Servers.FindAsync(request.ServerId);
+        if (server is not null)
+        {
+            server.SystemdLastRefreshedAt = DateTimeOffset.UtcNow;
+            server.UpdatedAt = DateTime.UtcNow;
         }
         await _db.SaveChangesAsync();
         return Ok(new { received = request.Services.Count });

@@ -12,6 +12,12 @@ if (existsSync(envPath)) {
 const apiUrl = process.env.AGENT_API_URL || 'http://localhost:5000'
 const normalizedApiUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl
 const parsedApiUrl = URL.canParse(normalizedApiUrl) ? new URL(normalizedApiUrl) : null
+const systemdExplicitUnits = process.env.SYSTEMD_EXPLICIT_UNITS || process.env.SYSTEMD_UNITS || ''
+const systemdDiscoveryScope = ['active', 'loaded', 'explicit'].includes(process.env.SYSTEMD_DISCOVERY_SCOPE || '')
+  ? process.env.SYSTEMD_DISCOVERY_SCOPE as 'active' | 'loaded' | 'explicit'
+  : 'active'
+
+const systemdCommandPollIntervalMs = parseInt(process.env.SYSTEMD_COMMAND_POLL_INTERVAL_MS || process.env.HEARTBEAT_INTERVAL_MS || '60000', 10)
 
 export const config = {
   apiUrl: parsedApiUrl?.pathname === '/api' ? parsedApiUrl.origin : normalizedApiUrl,
@@ -22,8 +28,11 @@ export const config = {
   logBatchSize: parseInt(process.env.LOG_BATCH_SIZE || '100', 10),
   maxBufferSize: parseInt(process.env.MAX_BUFFER_SIZE || '1000', 10),
   systemdEnabled: (process.env.SYSTEMD_ENABLED || 'false').toLowerCase() === 'true',
-  systemdUnits: (process.env.SYSTEMD_UNITS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  systemdDiscoveryScope,
+  systemdUnits: systemdExplicitUnits.split(',').map((s) => s.trim()).filter(Boolean),
   systemdLogBatchSize: parseInt(process.env.SYSTEMD_LOG_BATCH_SIZE || process.env.LOG_BATCH_SIZE || '100', 10),
+  systemdCollectIntervalMs: parseInt(process.env.SYSTEMD_COLLECT_INTERVAL_MS || '3600000', 10),
+  systemdCommandPollIntervalMs,
   updateEnabled: (process.env.AGENT_UPDATE_ENABLED || 'false').toLowerCase() === 'true',
   updateIntervalMs: parseInt(process.env.AGENT_UPDATE_INTERVAL_MS || '300000', 10),
   updateStateDir: process.env.AGENT_UPDATE_STATE_DIR || join(process.cwd(), 'agent-data', 'updates'),

@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 const execAsync = promisify(exec)
 const statePath = process.env.SYSTEMD_LOG_STATE_PATH || join(process.cwd(), 'agent-data', 'systemd-log-state.json')
 
+export type SystemdDiscoveryScope = 'active' | 'loaded' | 'explicit'
 type SystemdLogState = Record<string, { cursor?: string; timestamp?: string }>
 
 export interface SystemdServiceInfo {
@@ -33,6 +34,11 @@ export interface SystemdLogEntry {
   bootId?: string
 }
 
+export interface SystemdCollectionOptions {
+  scope?: SystemdDiscoveryScope
+  explicitUnits?: string[]
+}
+
 async function loadState(): Promise<SystemdLogState> {
   try { return JSON.parse(await readFile(statePath, 'utf-8')) as SystemdLogState } catch { return {} }
 }
@@ -44,15 +50,52 @@ async function saveState(state: SystemdLogState): Promise<void> {
 
 function quote(value: string): string { return `'${value.replace(/'/g, `'\''`)}'` }
 function parseNumber(value?: string): number | undefined { const n = Number(value); return Number.isFinite(n) ? n : undefined }
+function uniqueSorted(values: string[]): string[] { return [...new Set(values)].sort((a, b) => a.localeCompare(b)) }
 
-export async function collectSystemdServices(units: string[] = []): Promise<SystemdServiceInfo[]> {
+export async function discoverSystemdServiceUnits(scope: Exclude<SystemdDiscoveryScope, 'explicit'> = 'active'): Promise<string[]> {
+  const args = scope === 'loaded'
+    ? '--type=service --all --output=json --no-pager'
+    : '--type=service --state=active,failed --output=json --no-pager'
+
   try {
-    const targets = units.length > 0 ? units : []
-    if (targets.length === 0) return []
+    const { stdout } = await execAsync(`systemctl list-units ${args}`, { timeout: 10000, maxBuffer: 1024 * 1024 })
+    const parsed = JSON.parse(stdout) as unknown
+    if (!Array.isArray(parsed)) return []
 
-    const services: SystemdServiceInfo[] = []
-    for (const unit of targets) {
-      const { stdout } = await execAsync(`systemctl show ${quote(unit)} --property=Id,Names,Description,LoadState,ActiveState,SubState,FragmentPath,MainPID,MemoryCurrent,CPUUsageNSec,NRestarts --no-pager`, { timeout: 10000 })
+    return uniqueSorted(parsed
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return ''
+        const record = entry as Record<string, unknown>
+        const unit = record.unit ?? record.Unit
+        return typeof unit === 'string' ? unit : ''
+      })
+      .filter((unit) => unit.endsWith('.service')))
+  } catch (error) {
+    console.warn('Systemd service discovery failed:', error)
+    return []
+  }
+}
+
+async function resolveSystemdTargets(options: SystemdCollectionOptions): Promise<string[]> {
+  const scope = options.scope || 'active'
+  const explicitUnits = options.explicitUnits || []
+  if (scope === 'explicit') return uniqueSorted(explicitUnits)
+  const discovered = await discoverSystemdServiceUnits(scope)
+  return uniqueSorted([...discovered, ...explicitUnits])
+}
+
+export async function collectSystemdServices(optionsOrUnits: SystemdCollectionOptions | string[] = {}): Promise<SystemdServiceInfo[]> {
+  const options: SystemdCollectionOptions = Array.isArray(optionsOrUnits)
+    ? { scope: 'explicit', explicitUnits: optionsOrUnits }
+    : optionsOrUnits
+
+  const targets = await resolveSystemdTargets(options)
+  if (targets.length === 0) return []
+
+  const services: SystemdServiceInfo[] = []
+  for (const unit of targets) {
+    try {
+      const { stdout } = await execAsync(`systemctl show ${quote(unit)} --property=Id,Names,Description,LoadState,ActiveState,SubState,FragmentPath,MainPID,MemoryCurrent,CPUUsageNSec,NRestarts,UnitFileState,ExecStart,ExecMainStartTimestamp,UID,GID,Slice --no-pager`, { timeout: 10000 })
       const props = Object.fromEntries(stdout.split(/\r?\n/).filter(Boolean).map((line) => {
         const idx = line.indexOf('=')
         return idx >= 0 ? [line.slice(0, idx), line.slice(idx + 1)] : [line, '']
@@ -70,11 +113,9 @@ export async function collectSystemdServices(units: string[] = []): Promise<Syst
         cpuUsageNSec: parseNumber(props.CPUUsageNSec),
         restartCount: parseNumber(props.NRestarts),
       })
-    }
-    return services
-  } catch {
-    return []
+    } catch { /* skip unit */ }
   }
+  return services
 }
 
 function priorityToLevel(priority?: number): string {

@@ -351,6 +351,11 @@ jobs:
             fi
           }
 
+          SYSTEMD_ENABLED='${{ vars.SYSTEMD_ENABLED || secrets.SYSTEMD_ENABLED || 'true' }}'
+          SYSTEMD_DISCOVERY_SCOPE='${{ vars.SYSTEMD_DISCOVERY_SCOPE || secrets.SYSTEMD_DISCOVERY_SCOPE || 'loaded' }}'
+          SYSTEMD_COLLECT_INTERVAL_MS='${{ vars.SYSTEMD_COLLECT_INTERVAL_MS || secrets.SYSTEMD_COLLECT_INTERVAL_MS || '3600000' }}'
+          SYSTEMD_COMMAND_POLL_INTERVAL_MS='${{ vars.SYSTEMD_COMMAND_POLL_INTERVAL_MS || secrets.SYSTEMD_COMMAND_POLL_INTERVAL_MS || '60000' }}'
+
           validate_port BACKEND_PORT "$BACKEND_PORT"
           validate_port FRONTEND_PORT "$FRONTEND_PORT"
           if [ "$BACKEND_PORT" = "$FRONTEND_PORT" ]; then
@@ -400,6 +405,10 @@ jobs:
           export Redis__Enabled='${{ vars.REDIS_ENABLED || 'true' }}'
           export Redis__InstanceName='${{ vars.REDIS_INSTANCE_NAME || 'monitoring' }}'
           export Redis__WorkflowLogTtlHours='${{ vars.REDIS_WORKFLOW_LOG_TTL_HOURS || '24' }}'
+          export Systemd__Enabled='${{ vars.SYSTEMD_ENABLED || secrets.SYSTEMD_ENABLED || 'true' }}'
+          export Systemd__DiscoveryScope='${{ vars.SYSTEMD_DISCOVERY_SCOPE || secrets.SYSTEMD_DISCOVERY_SCOPE || 'loaded' }}'
+          export Systemd__CollectIntervalMs='${{ vars.SYSTEMD_COLLECT_INTERVAL_MS || secrets.SYSTEMD_COLLECT_INTERVAL_MS || '3600000' }}'
+          export Systemd__CommandPollIntervalMs='${{ vars.SYSTEMD_COMMAND_POLL_INTERVAL_MS || secrets.SYSTEMD_COMMAND_POLL_INTERVAL_MS || '60000' }}'
           export AGENT_VERSION='${{ needs.build.outputs.agent_version }}'
           export AGENT_BUILD_ID='${{ github.sha }}'
           export GITHUB_SHA='${{ github.sha }}'
@@ -470,6 +479,32 @@ jobs:
           fi
           rm -rf /tmp/monitoring-agent-installer-files
 
+          if [ -f /opt/monitoring-agent/.env ]; then
+            echo "Updating existing monitoring-agent systemd .env..."
+            set_env_var() {
+              local key="$1"
+              local value="$2"
+              local file="/opt/monitoring-agent/.env"
+              if grep -q "^${key}=" "$file"; then
+                sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+              else
+                printf '%s=%s\n' "$key" "$value" >> "$file"
+              fi
+            }
+            set_env_var SYSTEMD_ENABLED "$SYSTEMD_ENABLED"
+            set_env_var SYSTEMD_DISCOVERY_SCOPE "$SYSTEMD_DISCOVERY_SCOPE"
+            set_env_var SYSTEMD_COLLECT_INTERVAL_MS "$SYSTEMD_COLLECT_INTERVAL_MS"
+            set_env_var SYSTEMD_COMMAND_POLL_INTERVAL_MS "$SYSTEMD_COMMAND_POLL_INTERVAL_MS"
+            set_env_var SYSTEMD_LOG_BATCH_SIZE "100"
+            chmod 600 /opt/monitoring-agent/.env
+            if "$PM2_BIN" describe monitoring-agent >/dev/null 2>&1; then
+              "$PM2_BIN" delete monitoring-agent 2>/dev/null || true
+              "$PM2_BIN" start /opt/monitoring-agent/current/dist/index.js --name monitoring-agent --cwd /opt/monitoring-agent/current --update-env
+            fi
+          fi
+
+          # Agent installer default .env enables systemd discovery. Override via GitHub vars/secrets:
+          # SYSTEMD_ENABLED, SYSTEMD_DISCOVERY_SCOPE, SYSTEMD_COLLECT_INTERVAL_MS, SYSTEMD_COMMAND_POLL_INTERVAL_MS.
           # Monitoring agent is not managed by CI.
           # Install/update agents only via generated install.sh links.
 

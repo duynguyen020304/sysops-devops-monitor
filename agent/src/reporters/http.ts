@@ -241,6 +241,20 @@ export class HttpReporter {
     }
   }
 
+  async shouldRefreshSystemd(): Promise<boolean> {
+    try {
+      const response = await axios.get<{ refresh?: boolean }>(`${config.apiUrl}/api/agent/systemd/refresh-command`, {
+        headers: this.getHeaders(),
+        timeout: 10000,
+      })
+      return response.data.refresh === true
+    } catch (error) {
+      const axiosError = error as AxiosError
+      console.warn('Failed to fetch systemd refresh command:', axiosError.message)
+      return false
+    }
+  }
+
   async sendSystemdServices(services: SystemdServiceInfo[]): Promise<void> {
     if (services.length === 0) return
     const payload = { serverId: config.serverId, collectedAt: new Date().toISOString(), services }

@@ -160,6 +160,8 @@ public class MonitoringDbContext : DbContext
             e.Property(x => x.ServerToken).HasMaxLength(128);
             e.Property(x => x.MachineId).HasMaxLength(256);
             e.Property(x => x.ArchiveReason).HasMaxLength(256);
+            e.Property(x => x.SystemdRefreshRequestedAt);
+            e.Property(x => x.SystemdLastRefreshedAt);
             e.Property(x => x.SshUsername).HasMaxLength(128);
             e.Property(x => x.SshPort).HasDefaultValue(22);
             e.Property(x => x.SshPrivateKeyPath).HasMaxLength(512);

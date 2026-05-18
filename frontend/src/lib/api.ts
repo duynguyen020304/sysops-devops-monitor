@@ -132,6 +132,7 @@ export const pm2Api = {
 export const systemdApi = {
   listByServer: (serverId: string, params?: { search?: string; state?: string; page?: number; pageSize?: number }) =>
     api.get<SystemdService[]>(`/servers/${serverId}/systemd`, { params }),
+  refreshServer: (serverId: string) => api.post(`/servers/${serverId}/systemd/refresh`),
   getById: (serviceId: string) => api.get<SystemdService>(`/systemd/${serviceId}`),
   getLogs: (serviceId: string, params?: { limit?: number; level?: string; from?: string; to?: string }) =>
     api.get<SystemdLog[]>(`/systemd/${serviceId}/logs`, { params }),

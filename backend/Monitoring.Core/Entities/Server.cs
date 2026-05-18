@@ -22,6 +22,8 @@ public class Server
     public DateTimeOffset? LastHeartbeatAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public DateTimeOffset? SystemdRefreshRequestedAt { get; set; }
+    public DateTimeOffset? SystemdLastRefreshedAt { get; set; }
     public DateTime? ArchivedAt { get; set; }
     public string? ArchiveReason { get; set; }
 }

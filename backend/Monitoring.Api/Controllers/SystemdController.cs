@@ -19,6 +19,20 @@ public class SystemdController : ControllerBase
 
     public SystemdController(MonitoringDbContext db) => _db = db;
 
+    [HttpPost("~/api/servers/{serverId:guid}/systemd/refresh")]
+    [RequirePermission("connect_agents")]
+    public async Task<ActionResult<SystemdRefreshResponse>> RequestRefresh(Guid serverId)
+    {
+        if (!await ServerInWorkspace(serverId)) return NotFound();
+        var server = await _db.Servers.FindAsync(serverId);
+        if (server is null) return NotFound();
+        var now = DateTimeOffset.UtcNow;
+        server.SystemdRefreshRequestedAt = now;
+        server.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return Ok(new SystemdRefreshResponse(true, now));
+    }
+
     [HttpGet("~/api/servers/{serverId:guid}/systemd")]
     public async Task<ActionResult<List<SystemdServiceDto>>> GetByServer(Guid serverId, [FromQuery] string? search, [FromQuery] string? state, [FromQuery] int page = 1, [FromQuery] int pageSize = 100)
     {
