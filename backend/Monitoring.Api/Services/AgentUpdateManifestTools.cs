@@ -7,9 +7,10 @@ public static class AgentUpdateManifestTools
     public static string CanonicalizeJson(string json)
     {
         using var doc = JsonDocument.Parse(json);
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })) WriteCanonical(doc.RootElement, writer);
-        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        return JsonSerializer.Serialize(ToCanonicalValue(doc.RootElement), new JsonSerializerOptions
+        {
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        });
     }
 
     private static void WriteCanonical(JsonElement element, Utf8JsonWriter writer)
@@ -29,6 +30,19 @@ public static class AgentUpdateManifestTools
             default: writer.WriteNullValue(); break;
         }
     }
+
+    private static object? ToCanonicalValue(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.Object => element.EnumerateObject()
+            .OrderBy(p => p.Name, StringComparer.Ordinal)
+            .ToDictionary(p => p.Name, p => ToCanonicalValue(p.Value)),
+        JsonValueKind.Array => element.EnumerateArray().Select(ToCanonicalValue).ToArray(),
+        JsonValueKind.String => element.GetString(),
+        JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.TryGetDouble(out var d) ? d : element.GetRawText(),
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        _ => null,
+    };
 
     public static string SignManifest(string canonicalManifestJson, string privateKeyPem)
     {
