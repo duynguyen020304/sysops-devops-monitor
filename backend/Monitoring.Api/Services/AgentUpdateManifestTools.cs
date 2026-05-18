@@ -8,7 +8,7 @@ public static class AgentUpdateManifestTools
     {
         using var doc = JsonDocument.Parse(json);
         using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream)) WriteCanonical(doc.RootElement, writer);
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })) WriteCanonical(doc.RootElement, writer);
         return System.Text.Encoding.UTF8.GetString(stream.ToArray());
     }
 
