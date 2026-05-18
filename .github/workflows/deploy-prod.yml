@@ -80,7 +80,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="$(node -p "require('./agent/package.json').version")"
+          version="${GITHUB_SHA}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Install & Build Agent Installer Files

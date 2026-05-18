@@ -162,7 +162,7 @@ export class HttpReporter {
     const success = await this.requestWithRetry('post', '/api/agent/heartbeat', {
       serverId,
       timestamp: new Date().toISOString(),
-      agentVersion: process.env.AGENT_VERSION || '1.0.0',
+      agentVersion: process.env.AGENT_VERSION || process.env.AGENT_BUILD_ID || 'dev',
       buildId: process.env.AGENT_BUILD_ID || 'dev',
       capabilities: { updaterProtocol: 1 },
       updateState: config.updateEnabled ? 'Idle' : 'Disabled',
@@ -174,7 +174,7 @@ export class HttpReporter {
         payload: {
           serverId,
           timestamp: new Date().toISOString(),
-          agentVersion: process.env.AGENT_VERSION || '1.0.0',
+          agentVersion: process.env.AGENT_VERSION || process.env.AGENT_BUILD_ID || 'dev',
           buildId: process.env.AGENT_BUILD_ID || 'dev',
           capabilities: { updaterProtocol: 1 },
           updateState: config.updateEnabled ? 'Idle' : 'Disabled',

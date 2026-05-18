@@ -3,8 +3,8 @@ import { config } from '../config.js'
 import { AgentUpdateClient } from './client.js'
 import { stageUpdate } from './stager.js'
 
-const AGENT_VERSION = process.env.AGENT_VERSION || '1.0.0'
 const AGENT_BUILD_ID = process.env.AGENT_BUILD_ID || 'dev'
+const AGENT_VERSION = process.env.AGENT_VERSION || AGENT_BUILD_ID
 
 export class AgentUpdater {
   private client = new AgentUpdateClient()
