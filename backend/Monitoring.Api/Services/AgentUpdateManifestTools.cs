@@ -22,7 +22,7 @@ public static class AgentUpdateManifestTools
                 writer.WriteEndObject(); break;
             case JsonValueKind.Array:
                 writer.WriteStartArray(); foreach (var item in element.EnumerateArray()) WriteCanonical(item, writer); writer.WriteEndArray(); break;
-            case JsonValueKind.String: writer.WriteStringValue(element.GetString()); break;
+            case JsonValueKind.String: writer.WriteRawValue(JsonSerializer.Serialize(element.GetString()), skipInputValidation: true); break;
             case JsonValueKind.Number: writer.WriteRawValue(element.GetRawText()); break;
             case JsonValueKind.True: writer.WriteBooleanValue(true); break;
             case JsonValueKind.False: writer.WriteBooleanValue(false); break;
