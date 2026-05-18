@@ -64,6 +64,18 @@ const router = createRouter({
           meta: { requiredPermission: 'view_pm2_logs' },
         },
         {
+          path: 'systemd',
+          name: 'systemd-services',
+          component: () => import('@/views/SystemdServicesView.vue'),
+          meta: { requiredPermission: 'view_pm2_logs' },
+        },
+        {
+          path: 'systemd/:serviceId',
+          name: 'systemd-service-detail',
+          component: () => import('@/views/SystemdServiceDetailView.vue'),
+          meta: { requiredPermission: 'view_pm2_logs' },
+        },
+        {
           path: 'logs',
           name: 'logs',
           component: () => import('@/views/LogsView.vue'),

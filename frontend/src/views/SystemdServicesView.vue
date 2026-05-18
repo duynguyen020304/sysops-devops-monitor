@@ -161,7 +161,7 @@ function formatMemory(bytes: number): string {
                 v-for="svc in filteredServices"
                 :key="svc.id"
                 class="cursor-pointer transition-colors odd:bg-[var(--color-bg-secondary)] even:bg-[var(--color-bg-secondary)]/50 hover:bg-[var(--color-bg-tertiary)]/50"
-                @click="router.push(`/systemd/${svc.id}`)"
+                @click="router.push(`/pm2/systemd/${svc.id}`)"
               >
                 <td class="px-4 py-3 text-[var(--color-text-secondary)]">{{ svc.serverHostname }}</td>
                 <td class="px-4 py-3 font-medium text-[var(--color-text)]">{{ svc.name }}</td>

@@ -27,6 +27,8 @@ const router = useRouter()
 const servers = ref<Server[]>([])
 const allProcesses = ref<RuntimeProcess[]>([])
 const loading = ref(true)
+const refreshing = ref(false)
+const refreshMessage = ref('')
 const serverFilter = ref('')
 const typeFilter = ref<RuntimeKind | ''>('')
 const statusFilter = ref('')
@@ -64,7 +66,7 @@ function mapSystemd(s: SystemdService & { serverHostname: string; serverId: stri
   }
 }
 
-onMounted(async () => {
+async function loadProcesses(): Promise<void> {
   loading.value = true
   try {
     const { data } = await serversApi.list()
@@ -83,7 +85,24 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+async function forceSystemdRefresh(): Promise<void> {
+  const targetServers = serverFilter.value ? servers.value.filter((s) => s.id === serverFilter.value) : servers.value
+  if (targetServers.length === 0) return
+  refreshing.value = true
+  refreshMessage.value = ''
+  try {
+    await Promise.all(targetServers.map((server) => systemdApi.refreshServer(server.id)))
+    refreshMessage.value = `Systemd refresh requested for ${targetServers.length} server(s). Agents will snapshot on next poll.`
+  } catch {
+    refreshMessage.value = 'Systemd refresh request failed.'
+  } finally {
+    refreshing.value = false
+  }
+}
+
+onMounted(loadProcesses)
 
 const filteredProcesses = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -162,6 +181,26 @@ function formatMemory(bytes?: number | null): string {
           <option value="">All statuses</option>
           <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
         </select>
+      </div>
+
+      <div class="mb-4 flex flex-wrap gap-3">
+        <button
+          type="button"
+          class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          :disabled="refreshing"
+          @click="forceSystemdRefresh"
+        >
+          {{ refreshing ? 'Requesting...' : 'Force systemd refresh' }}
+        </button>
+        <button
+          type="button"
+          class="rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm text-[var(--color-text)] disabled:opacity-50"
+          :disabled="loading"
+          @click="loadProcesses"
+        >
+          Reload UI
+        </button>
+        <span v-if="refreshMessage" class="self-center text-sm text-[var(--color-text-secondary)]">{{ refreshMessage }}</span>
       </div>
 
       <!-- Empty -->

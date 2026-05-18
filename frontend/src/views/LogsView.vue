@@ -78,7 +78,7 @@ function handleLogClick(entry: { sourceType: string; sourceName: string | null; 
   } else if (entry.sourceType === 'pm2' && entry.sourceId) {
     router.push(`/pm2/${entry.sourceId}`)
   } else if (entry.sourceType === 'systemd' && entry.sourceId) {
-    router.push(`/systemd/${entry.sourceId}`)
+    router.push(`/pm2/systemd/${entry.sourceId}`)
   }
 }
 </script>
