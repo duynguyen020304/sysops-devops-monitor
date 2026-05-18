@@ -68,6 +68,7 @@ public class AgentReleasePublisherService : BackgroundService
             {
                 Id = Guid.NewGuid(), WorkspaceId = workspaceId, Version = version, BuildId = buildId,
                 ManifestJson = manifestJson, ManifestSignature = signature, PublicKeyId = publicKeyId,
+                Channel = "stable", GitSha = _config["GITHUB_SHA"] ?? Environment.GetEnvironmentVariable("GITHUB_SHA"),
                 ArtifactPath = artifactPath, ArtifactSha256 = sha, ArtifactSize = artifactBytes.LongLength,
                 IsActive = true, CreatedAt = DateTimeOffset.UtcNow
             });

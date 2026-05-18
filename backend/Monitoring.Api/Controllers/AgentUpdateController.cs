@@ -194,7 +194,7 @@ public class AgentUpdateController : ControllerBase
         var manifest = new { schemaVersion = 1, version, buildId, gitSha = _config["GITHUB_SHA"] ?? Environment.GetEnvironmentVariable("GITHUB_SHA"), createdAt = DateTimeOffset.UtcNow.ToString("O"), expiresAt = DateTimeOffset.UtcNow.AddDays(14).ToString("O"), channel = "stable", artifactSha256 = sha, artifactSize = artifactBytes.LongLength };
         var manifestJson = AgentUpdateManifestTools.CanonicalizeJson(JsonSerializer.Serialize(manifest, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
         var signature = _config["AgentUpdates:PrivateKeyPem"] is { Length: > 0 } privateKey ? AgentUpdateManifestTools.SignManifest(manifestJson, privateKey) : "UNSIGNED_DEV";
-        return new AgentUpdateRelease { Id = Guid.NewGuid(), WorkspaceId = workspaceId, Version = version, BuildId = buildId, ManifestJson = manifestJson, ManifestSignature = signature, PublicKeyId = publicKeyId, ArtifactPath = artifactPath, ArtifactSha256 = sha, ArtifactSize = artifactBytes.LongLength, IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
+        return new AgentUpdateRelease { Id = Guid.NewGuid(), WorkspaceId = workspaceId, Version = version, BuildId = buildId, ManifestJson = manifestJson, ManifestSignature = signature, PublicKeyId = publicKeyId, Channel = "stable", GitSha = _config["GITHUB_SHA"] ?? Environment.GetEnvironmentVariable("GITHUB_SHA"), ArtifactPath = artifactPath, ArtifactSha256 = sha, ArtifactSize = artifactBytes.LongLength, IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
     }
 
     private string GetBaseUrl()

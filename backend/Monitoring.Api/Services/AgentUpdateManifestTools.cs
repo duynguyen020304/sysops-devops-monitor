@@ -30,10 +30,12 @@ public static class AgentUpdateManifestTools
         }
     }
 
-    public static string SignManifest(string manifestJson, string privateKeyPem)
+    public static string SignManifest(string canonicalManifestJson, string privateKeyPem)
     {
         using var key = System.Security.Cryptography.ECDsa.Create();
         key.ImportFromPem(privateKeyPem);
-        return Convert.ToBase64String(key.SignData(System.Text.Encoding.UTF8.GetBytes(manifestJson), System.Security.Cryptography.HashAlgorithmName.SHA256));
+        var data = System.Text.Encoding.UTF8.GetBytes(canonicalManifestJson);
+        var signature = key.SignData(data, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        return Convert.ToBase64String(signature);
     }
 }
